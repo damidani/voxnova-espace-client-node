@@ -4,36 +4,70 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
+<meta name="csrf" content="<%= csrf %>">
 <% if (typeof url !== 'undefined' && title === 'Ouverture du panneau') { %><meta http-equiv="refresh" content="0;url=<%= url %>"><% } %>
 <title><%= title %> · <%= brand.name %></title>
 <link rel="stylesheet" href="/static/style.css">
 <link rel="stylesheet" href="/theme.css">
+<script src="/static/app.js" defer></script>
 </head>
 <body>
-<% if (me) { %>
-<header class="top"><div class="top-in">
-  <a class="logo" href="/"><% if (brand.logoUrl) { %><img src="<%= brand.logoUrl %>" alt="<%= brand.name %>"><% } else { %><span class="dot"></span><%= brand.name %><% } %></a>
-  <nav class="nav" aria-label="Menu">
-    <% const items = me.role === 'ORG_ADMIN' ? [['/', 'Tableau de bord'], ['/utilisateurs', 'Utilisateurs'], ['/numeros', 'Numéros'], ['/files', 'Files d’attente'], ['/appels', 'Appels'], ['/messagerie', 'Messagerie'], ['/sms', 'SMS'], ['/factures', 'Factures']] : [['/', 'Accueil']]; %>
-    <% for (const [href, label] of items) { %><a href="<%= href %>" class="<%= (href === '/' ? path === '/' : path.startsWith(href)) ? 'on' : '' %>"><%= label %></a><% } %>
-  </nav>
-  <div class="who">
-    <span class="mut small"><%= me.name %> · <%= me.orgName %></span>
-    <form class="inline" method="post" action="/panneau"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn ghost small" title="Toutes les fonctions avancées">Panneau complet</button></form>
-    <form class="inline" method="post" action="/deconnexion"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn ghost small">Déconnexion</button></form>
+<%- include('icons') %>
+<% const ico = (n) => `<svg class="ico" aria-hidden="true"><use href="#i-${n}"/></svg>`; %>
+<% const logo = brand.logoUrl ? `<img src="${brand.logoUrl.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])}" alt="">` : `<span class="mark">${ico('phone')}</span>`; %>
+<% if (me) { const initials = String(me.name || me.email || '?').split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase(); %>
+<input type="checkbox" id="menu-toggle" aria-label="Ouvrir le menu">
+<div class="shell">
+  <label class="scrim" for="menu-toggle" aria-hidden="true"></label>
+  <aside class="side">
+    <a class="brand" href="/"><%- logo %><% if (!brand.logoUrl) { %><span><%= brand.name %></span><% } %></a>
+    <nav class="nav" aria-label="Menu">
+      <% const sections = me.role === 'ORG_ADMIN' ? [
+        ['', [['/', 'Tableau de bord', 'home']]],
+        ['Téléphonie', [['/numeros', 'Numéros', 'phone'], ['/scenarios', 'Scénarios d’appel', 'flow'], ['/files', 'Files d’attente', 'queue'], ['/messagerie', 'Messagerie', 'voicemail']]],
+        ['Activité', [['/appels', 'Journal des appels', 'history'], ['/sms', 'SMS', 'message']]],
+        ['Entreprise', [['/utilisateurs', 'Utilisateurs', 'users'], ['/factures', 'Abonnement et factures', 'invoice']]],
+      ] : [['', [['/', 'Accueil', 'home']]]]; %>
+      <% for (const [sec, items] of sections) { %>
+        <% if (sec) { %><div class="nav-sec"><%= sec %></div><% } %>
+        <% for (const [href, label, icon] of items) { %><a href="<%= href %>" class="<%= (href === '/' ? path === '/' : path.startsWith(href)) ? 'on' : '' %>"><%- ico(icon) %><%= label %></a><% } %>
+      <% } %>
+    </nav>
+    <div class="side-foot">
+      <div class="me"><span class="avatar"><%= initials %></span><div><b><%= me.name %></b><span><%= me.orgName %></span></div></div>
+      <form method="post" action="/panneau"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn soft sm" title="Toutes les fonctions avancées"><%- ico('external') %> Panneau complet</button></form>
+      <form method="post" action="/deconnexion"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn ghost sm"><%- ico('logout') %> Déconnexion</button></form>
+    </div>
+  </aside>
+  <div class="content">
+    <div class="topbar"><label for="menu-toggle" title="Menu"><%- ico('menu') %></label><a class="brand" href="/"><%- logo %><% if (!brand.logoUrl) { %><span><%= brand.name %></span><% } %></a></div>
+    <main>
+      <% if (flash) { %><div class="alert <%= flash.type %>" role="status"><%- ico(flash.type === 'error' ? 'alert' : 'check') %><span><%= flash.text %></span></div><% } %>
+      <%- body %>
+    </main>
+    <footer class="foot"><%= brand.name %><% if (brand.supportEmail) { %> · <a href="mailto:<%= brand.supportEmail %>"><%= brand.supportEmail %></a><% } %><% if (brand.supportPhone) { %> · <%= brand.supportPhone %><% } %></footer>
   </div>
-</div></header>
-<main>
-  <% if (flash) { %><div class="alert <%= flash.type %>" role="status"><%= flash.text %></div><% } %>
-  <%- body %>
-</main>
-<footer><%= brand.name %><% if (brand.supportEmail) { %> · <a href="mailto:<%= brand.supportEmail %>"><%= brand.supportEmail %></a><% } %><% if (brand.supportPhone) { %> · <%= brand.supportPhone %><% } %></footer>
+</div>
 <% } else { %>
 <div class="auth">
-  <div class="logo"><% if (brand.logoUrl) { %><img src="<%= brand.logoUrl %>" alt="<%= brand.name %>"><% } else { %><span class="dot"></span><%= brand.name %><% } %></div>
-  <% if (flash) { %><div class="alert <%= flash.type %>" role="status"><%= flash.text %></div><% } %>
-  <%- body %>
-  <p class="mut small"><% if (brand.supportEmail) { %>Besoin d’aide ? <a href="mailto:<%= brand.supportEmail %>"><%= brand.supportEmail %></a><% } %></p>
+  <section class="auth-art">
+    <div class="brand"><%- logo %><% if (!brand.logoUrl) { %><span><%= brand.name %></span><% } %></div>
+    <div>
+      <h2>Votre téléphonie d’entreprise, simple et sous contrôle.</h2>
+      <ul>
+        <li><%- ico('flow') %> Scénarios d’appel : horaires, menus, files d’attente</li>
+        <li><%- ico('chart') %> Activité en direct et journal des appels</li>
+        <li><%- ico('users') %> Utilisateurs, numéros et messagerie en quelques clics</li>
+        <li><%- ico('shield') %> Connexion sécurisée, double authentification</li>
+      </ul>
+    </div>
+    <p class="small"><%= brand.name %><% if (brand.supportPhone) { %> · <%= brand.supportPhone %><% } %></p>
+  </section>
+  <section class="auth-form"><div class="auth-box">
+    <% if (flash) { %><div class="alert <%= flash.type %>" role="status"><%= flash.text %></div><% } %>
+    <%- body %>
+    <% if (brand.supportEmail) { %><p class="help">Besoin d’aide ? <a href="mailto:<%= brand.supportEmail %>"><%= brand.supportEmail %></a></p><% } %>
+  </div></section>
 </div>
 <% } %>
 </body>

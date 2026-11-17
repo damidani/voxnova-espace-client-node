@@ -12,14 +12,15 @@ const app = express();
 app.disable('x-powered-by');
 if (process.env.TRUST_PROXY === 'true') app.set('trust proxy', 1);
 app.use(express.urlencoded({ extended: false, limit: '100kb' }));
+app.use(express.json({ limit: '500kb' }));
 app.use('/static', express.static(path.join(root, 'public'), { maxAge: '1d' }));
 // couleur de la marque (feuille de style générée : la politique de sécurité interdit les styles en ligne)
 app.get('/theme.css', (_req, res) => res.type('text/css').set('Cache-Control', 'public, max-age=3600').send(`:root{--brand:${config.brand.color}}`));
 
-// en-têtes de sécurité : aucun script, aucune ressource externe sauf images (logo) et lecture audio de la plateforme
+// en-têtes de sécurité : scripts du site uniquement, aucune ressource externe sauf images (logo) et lecture audio de la plateforme
 app.use((_req, res, next) => {
   res.set({
-    'Content-Security-Policy': `default-src 'self'; img-src 'self' data: https:; media-src 'self' ${config.apiUrl}; style-src 'self'; script-src 'none'; form-action 'self' ${config.apiUrl}; frame-ancestors 'none'; base-uri 'none'`,
+    'Content-Security-Policy': `default-src 'self'; img-src 'self' data: https:; media-src 'self' ${config.apiUrl}; style-src 'self'; script-src 'self'; connect-src 'self'; form-action 'self' ${config.apiUrl}; frame-ancestors 'none'; base-uri 'none'`,
     'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin', 'X-Frame-Options': 'DENY',
     ...(config.production ? { 'Strict-Transport-Security': 'max-age=31536000' } : {}),
   });
@@ -51,7 +52,7 @@ const as = (req) => ({ org: req.session.user.orgId, user: req.session.user.id })
 // formulaires : jeton anti-falsification obligatoire
 app.use((req, res, next) => {
   if (req.method !== 'POST') return next();
-  const sent = Buffer.from(String(req.body?._csrf ?? ''));
+  const sent = Buffer.from(String(req.body?._csrf ?? req.get('x-csrf-token') ?? ''));
   const expected = Buffer.from(String(req.session.csrf ?? ''));
   if (!expected.length || sent.length !== expected.length || !timingSafeEqual(sent, expected)) return res.status(403).send('Formulaire expiré : rechargez la page.');
   next();
@@ -134,8 +135,8 @@ app.post('/inscription', page(async (req, res) => {
 // ------------------------------------------------------------------ espace client
 app.get('/', signedIn, page(async (req, res) => {
   if (req.session.user.role !== 'ORG_ADMIN') return render(req, res, 'home-user', { title: 'Accueil' });
-  const [o, numbers] = await Promise.all([api('GET', '/api/org/overview', { as: as(req) }), api('GET', '/api/centrex/numbers', { as: as(req) })]);
-  render(req, res, 'dashboard', { title: 'Tableau de bord', o, numbers });
+  const [o, numbers, cdr, flows] = await Promise.all([api('GET', '/api/org/overview', { as: as(req) }), api('GET', '/api/centrex/numbers', { as: as(req) }), api('GET', '/api/centrex/cdr', { as: as(req), query: { page: 1, pageSize: 6 } }).catch(() => null), api('GET', '/api/centrex/flows', { as: as(req) }).catch(() => [])]);
+  render(req, res, 'dashboard', { title: 'Tableau de bord', o, numbers, recent: (cdr?.items ?? []).slice(0, 6), flows });
 }));
 
 app.get('/utilisateurs', signedIn, adminOnly, page(async (req, res) => {
@@ -242,6 +243,61 @@ app.get('/factures/:id.pdf', signedIn, adminOnly, page(async (req, res) => {
 }));
 
 // panneau complet (fonctions avancées) : lien de connexion à usage unique
+// ------------------------------------------------------------------ scénarios d'appel
+const TEMPLATES = { horaires: 'Accueil avec horaires', menu: 'Menu à touches', accueil: 'Annonce puis transfert', rappel: 'File d’attente avec rappel', sms: 'SMS en dehors des horaires', vierge: 'Nouveau scénario' };
+/** Réponse JSON pour l'éditeur (le navigateur ne parle qu'à l'espace client, jamais à l'API). */
+const json = (fn) => async (req, res) => {
+  try { res.json(await fn(req, res)); } catch (e) {
+    if (!(e instanceof ApiError)) { console.error(e); return res.status(500).json({ error: 'Une erreur est survenue.' }); }
+    res.status(e.status).json({ error: e.message, errors: e.details ?? [] });
+  }
+};
+const flowBody = (b) => ({ name: String(b.name ?? '').trim().slice(0, 100) || 'Scénario', description: String(b.description ?? '').slice(0, 500), number: /^\d{2,6}$/.test(String(b.number ?? '')) ? String(b.number) : null, enabled: b.enabled !== false, graph: b.graph && typeof b.graph === 'object' ? b.graph : { nodes: [], edges: [] } });
+app.get('/scenarios', signedIn, adminOnly, page(async (req, res) => {
+  const [flows, numbers] = await Promise.all([api('GET', '/api/centrex/flows', { as: as(req) }), api('GET', '/api/centrex/numbers', { as: as(req) })]);
+  const used = {};
+  for (const n of numbers) if (n.destType === 'FLOW' && n.destId) (used[n.destId] ??= []).push(n.number);
+  render(req, res, 'flows', { title: 'Scénarios d’appel', flows, used, templates: TEMPLATES });
+}));
+app.get('/scenarios/nouveau', signedIn, adminOnly, (req, res) => {
+  const tpl = Object.hasOwn(TEMPLATES, String(req.query.modele)) ? String(req.query.modele) : 'vierge';
+  render(req, res, 'flow-editor', { title: TEMPLATES[tpl], flowId: 'nouveau', template: tpl, name: tpl === 'vierge' ? '' : TEMPLATES[tpl] });
+});
+app.get('/scenarios/:id', signedIn, adminOnly, (req, res) => render(req, res, 'flow-editor', { title: 'Scénario d’appel', flowId: req.params.id, template: '', name: '' }));
+app.get('/scenarios/:id/donnees', signedIn, adminOnly, json(async (req) => {
+  const [flow, destinations, audio] = await Promise.all([
+    req.params.id === 'nouveau' ? null : api('GET', `/api/centrex/flows/${encodeURIComponent(req.params.id)}`, { as: as(req) }),
+    api('GET', '/api/centrex/destinations', { as: as(req) }),
+    api('GET', '/api/centrex/audio', { as: as(req) }).catch(() => []),
+  ]);
+  return { flow, catalog: { ...destinations, audio: audio.map((a) => ({ id: a.id, name: a.name })) } };
+}));
+app.post('/scenarios/:id/donnees', signedIn, adminOnly, json(async (req) => {
+  const body = flowBody(req.body);
+  if (req.params.id === 'nouveau') {
+    const f = await api('POST', '/api/centrex/flows', { as: as(req), body });
+    flash(req, 'success', `Scénario « ${f.name} » créé. Choisissez-le comme destination d’un numéro pour qu’il serve.`);
+    return f;
+  }
+  return api('PUT', `/api/centrex/flows/${encodeURIComponent(req.params.id)}`, { as: as(req), body });
+}));
+app.post('/scenarios/:id/simuler', signedIn, adminOnly, json(async (req) => {
+  const b = req.body ?? {};
+  return api('POST', '/api/centrex/flows/simulate', { as: as(req), body: { graph: b.graph, caller: String(b.caller ?? '0612345678').slice(0, 30), digits: [].concat(b.digits ?? []).map(String).slice(0, 30), ...(b.at ? { at: String(b.at) } : {}) } });
+}));
+app.post('/scenarios/:id/activer', signedIn, adminOnly, page(async (req, res) => {
+  const f = await api('GET', `/api/centrex/flows/${encodeURIComponent(req.params.id)}`, { as: as(req) });
+  await api('PUT', `/api/centrex/flows/${encodeURIComponent(f.id)}`, { as: as(req), body: flowBody({ ...f, enabled: !f.enabled }) });
+  flash(req, 'success', f.enabled ? `« ${f.name} » désactivé.` : `« ${f.name} » activé.`);
+  res.redirect('/scenarios');
+}));
+app.post('/scenarios/:id/supprimer', signedIn, adminOnly, page(async (req, res) => {
+  await api('DELETE', `/api/centrex/flows/${encodeURIComponent(req.params.id)}`, { as: as(req) });
+  flash(req, 'success', 'Scénario supprimé.');
+  res.redirect('/scenarios');
+}));
+app.get('/appels-en-cours', signedIn, adminOnly, json(async (req) => api('GET', '/api/centrex/live', { as: as(req) })));
+
 app.post('/panneau', signedIn, page(async (req, res) => {
   const r = await api('POST', `/api/reseller/clients/${encodeURIComponent(req.session.user.orgId)}/login-link`, { body: { user: req.session.user.id, ttlSeconds: 60 } });
   // page intermédiaire : un formulaire ne peut pas rediriger vers un autre domaine (politique de sécurité)

@@ -10,15 +10,16 @@ Il se branche sur l’API de la plateforme avec **votre clé revendeur** : aucun
 
 | Page | Fonctions |
 |---|---|
-| **Tableau de bord** | Appels reçus, passés et manqués sur 30 jours, temps de conversation, utilisateurs, numéros, abonnement |
+| **Tableau de bord** | Graphique des appels sur 30 jours, appels en cours en direct, derniers appels, numéros non routés, abonnement |
 | **Utilisateurs** | Liste (rôle, poste, état, dernière connexion), ajout avec invitation par e-mail, suppression |
 | **Numéros** | Où sonne chaque numéro (poste, groupe, file d’attente, standard vocal, horaires, messagerie…), achat d’un nouveau numéro par zone |
+| **Scénarios d’appel** | Éditeur visuel : horaires, menu à touches, annonce, file d’attente, transfert, messagerie, SMS à l’appelant, rappel ; modèles prêts à l’emploi, test par simulation (aucun appel passé), brouillon ou actif |
 | **Files d’attente** | Création, agents, répartition des appels, attente maximale, suppression |
 | **Appels** | Journal paginé, filtres entrants / sortants / manqués |
 | **Messagerie** | Messages vocaux de chaque poste, transcription, écoute, suppression |
 | **SMS** | Envoi, forfait, solde et SMS au comptage, historique mois par mois |
 | **Factures** | Abonnement en cours, factures et avoirs en PDF |
-| **Panneau complet** | Bouton qui ouvre le panneau avancé de la plateforme (scénarios, standard vocal, statistiques…) sans redemander le mot de passe, sur votre domaine en marque blanche |
+| **Panneau complet** | Bouton qui ouvre le panneau avancé de la plateforme (standard vocal, statistiques, blocs avancés des scénarios…) sans redemander le mot de passe, sur votre domaine en marque blanche |
 
 Et aussi : **mot de passe oublié** (e-mail à vos couleurs), **double authentification**, **inscription en ligne** avec période d’essai (facultative).
 
@@ -83,7 +84,7 @@ Pour vous connecter comme un client fictif : sur la page de connexion, cliquez s
 ## Personnaliser
 
 - **Textes et pages** : `views/*.ejs` (gabarits EJS, en français).
-- **Apparence** : `public/style.css` (une seule feuille, mode sombre automatique). La couleur de la marque vient de `BRAND_COLOR`.
+- **Apparence** : `public/style.css` (une seule feuille, mode sombre automatique, menu latéral repliable sur mobile). Interactions et éditeur de scénarios : `public/app.js`. La couleur de la marque vient de `BRAND_COLOR`.
 - **Nouvelles pages** : toute l’API est utilisable ; voir la [documentation revendeur](https://hcloud.fr/docs/revendeur) et la [documentation clients](https://hcloud.fr/docs/clients). Dans `src/server.js`, `api('GET', '/api/…', { as: as(req) })` appelle l’API au nom du client connecté.
 
 ## Comment ça marche
@@ -97,7 +98,8 @@ Pour vous connecter comme un client fictif : sur la page de connexion, cliquez s
 - Clé d’API uniquement côté serveur.
 - Jeton anti-falsification sur chaque formulaire.
 - Tentatives de connexion limitées (10 par minute et par adresse, en plus des limites et du verrouillage de la plateforme).
-- En-têtes de sécurité stricts : aucun script, pas d’intégration dans un autre site.
+- En-têtes de sécurité stricts : seuls les scripts du site (`public/app.js`, sans dépendance) sont autorisés, aucun style en ligne, pas d’intégration dans un autre site.
+- Le navigateur ne parle jamais à l’API : l’éditeur de scénarios passe par l’espace client (jeton anti-falsification dans l’en-tête `X-CSRF-Token`).
 
 ## Tests
 

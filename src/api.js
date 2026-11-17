@@ -2,7 +2,7 @@ import { config } from './config.js';
 
 /** Erreur renvoyée par l'API (message en français dans `message`). */
 export class ApiError extends Error {
-  constructor(status, message) { super(message); this.status = status; }
+  constructor(status, message, details) { super(message); this.status = status; this.details = details; }
 }
 
 /**
@@ -26,6 +26,6 @@ export async function api(method, path, { body, query, as, raw } = {}) {
   const text = await res.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = null; }
-  if (!res.ok) throw new ApiError(res.status, data?.error ?? `Erreur ${res.status}`);
+  if (!res.ok) throw new ApiError(res.status, data?.error ?? `Erreur ${res.status}`, Array.isArray(data?.details) ? data.details : undefined);
   return data;
 }

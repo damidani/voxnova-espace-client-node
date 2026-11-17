@@ -1,0 +1,34 @@
+<% const ico = (n, c) => `<svg class="ico ${c || ''}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+   const tplIcons = { horaires: 'clock', menu: 'hash', accueil: 'volume', rappel: 'callback', sms: 'message', vierge: 'plus' };
+   const tplText = { horaires: 'Ouvert : file d’attente. Fermé : message puis messagerie.', menu: '« Tapez 1 pour le service commercial, 2 pour le support. »', accueil: 'Un message d’accueil, puis l’appel sonne au bon endroit.', rappel: 'Si personne ne répond, l’appelant demande à être rappelé.', sms: 'En dehors des horaires, un SMS part vers l’appelant.', vierge: 'Partir d’une page blanche.' }; %>
+<div class="page-head"><div><h1>Scénarios d’appel</h1><p class="mut">Décidez de ce qui se passe quand on vous appelle : horaires, menu à touches, file d’attente, messagerie, SMS…</p></div>
+  <a class="btn" href="/scenarios/nouveau"><%- ico('plus') %> Nouveau scénario</a></div>
+<% if (flows.length) { %>
+<div class="card flush">
+  <div class="card-head"><h2>Vos scénarios</h2><span class="mut small"><%= flows.length %> scénario<%= flows.length > 1 ? 's' : '' %></span></div>
+  <% for (const f of flows) { const nums = used[f.id] || []; %>
+  <div class="flow-row">
+    <span class="chip"><%- ico('flow', 'lg') %></span>
+    <div class="grow">
+      <a href="/scenarios/<%= f.id %>"><b><%= f.name %></b></a>
+      <div class="small mut"><%= nums.length ? `Utilisé par ${nums.map(phone).join(', ')}` : 'Aucun numéro ne l’utilise' %><%= f.number ? ` · numéro interne ${f.number}` : '' %> · modifié le <%= dateFr(f.updatedAt) %></div>
+    </div>
+    <span class="badge <%= f.enabled ? 'ok' : '' %>"><%= f.enabled ? 'Actif' : 'Brouillon' %></span>
+    <div class="actions">
+      <a class="btn ghost sm" href="/scenarios/<%= f.id %>">Modifier</a>
+      <form class="inline" method="post" action="/scenarios/<%= f.id %>/activer"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn ghost sm"><%= f.enabled ? 'Désactiver' : 'Activer' %></button></form>
+      <form class="inline" method="post" action="/scenarios/<%= f.id %>/supprimer" data-confirm="Supprimer le scénario « <%= f.name %> » ?"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn danger sm" aria-label="Supprimer <%= f.name %>"><%- ico('trash') %></button></form>
+    </div>
+  </div>
+  <% } %>
+</div>
+<% } %>
+<div class="card">
+  <div class="card-head"><h2><%- ico('sparkles') %> <%= flows.length ? 'Partir d’un modèle' : 'Créez votre premier scénario' %></h2></div>
+  <div class="templates">
+    <% for (const [k, label] of Object.entries(templates)) { %>
+      <a class="tpl" href="/scenarios/nouveau?modele=<%= k %>"><span class="chip"><%- ico(tplIcons[k]) %></span><b><%= label %></b><span><%= tplText[k] %></span></a>
+    <% } %>
+  </div>
+</div>
+<p class="small mut">Pour qu’un scénario serve, choisissez-le comme destination d’un numéro sur la page <a href="/numeros">Numéros</a>.</p>

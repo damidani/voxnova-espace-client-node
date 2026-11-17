@@ -19,6 +19,9 @@ const fake = createServer((req, res) => {
     if (req.url === '/api/org/overview') return send(200, { org: { status: 'ACTIVE' }, usage: { used: 3, seats: 5 }, service: { ok: true }, license: null, counts: { extensions: 3, devices: 1, calls30d: 4, talkTimeSec: 120 }, callsPerDay: [{ day: '2026-11-01', inbound: 3, outbound: 1, missed: 1 }] });
     if (req.url === '/api/centrex/numbers') return send(200, [{ id: 'n1', number: '+33199000001', label: 'Accueil', destType: null }]);
     if (req.url === '/api/v1/sms' && req.method === 'POST') return send(200, { id: 's1', to: '+33612345678', status: 'queued', segments: 1 });
+    if (req.url === '/api/centrex/flows' && req.method === 'GET') return send(200, [{ id: 'f1', name: 'Accueil', number: null, enabled: true, updatedAt: '2026-11-01T10:00:00Z' }]);
+    if (req.url === '/api/centrex/flows' && req.method === 'POST') { const b = JSON.parse(body); return b.enabled && !b.graph.nodes.length ? send(400, { error: 'Il faut un bloc Début', details: ['Il faut un bloc Début'] }) : send(200, { id: 'f2', ...b }); }
+    if (req.url === '/api/centrex/flows/simulate') return send(200, { trace: [{ type: 'play', label: 'Annonce', detail: 'annonce' }], end: { kind: 'hangup', detail: '' } });
     send(404, { error: 'Introuvable' });
   });
 });
@@ -59,6 +62,22 @@ test('connexion, tableau de bord, envoi de SMS au nom du client, formulaires pro
   const sms = await post('/sms', { _csrf: csrf, to: '0612345678', text: 'Bonjour' });
   assert.equal(sms.location, '/sms');
   assert.deepEqual(calls.find((c) => c.url === '/api/v1/sms').body, { to: '0612345678', text: 'Bonjour' });
+
+  // scénarios : liste, enregistrement et simulation en JSON, jeton dans l'en-tête
+  page = await get('/scenarios');
+  assert.match(page.text, /Accueil/);
+  const graph = { nodes: [{ id: 's', type: 'start', data: {} }], edges: [] };
+  const js = (path, body, token) => fetch(base + path, { method: 'POST', headers: { cookie, 'content-type': 'application/json', ...(token ? { 'x-csrf-token': token } : {}) }, body: JSON.stringify(body) });
+  assert.equal((await js('/scenarios/nouveau/donnees', { name: 'X', graph })).status, 403, 'sans jeton');
+  const token = csrfOf(page.text);
+  const created = await js('/scenarios/nouveau/donnees', { name: 'Soir', number: 'abc', graph }, token);
+  assert.equal((await created.json()).id, 'f2');
+  assert.deepEqual(calls.findLast((c) => c.url === '/api/centrex/flows').body, { name: 'Soir', description: '', number: null, enabled: true, graph });
+  const refused = await js('/scenarios/nouveau/donnees', { name: 'Vide', graph: { nodes: [], edges: [] } }, token);
+  assert.equal(refused.status, 400);
+  assert.deepEqual((await refused.json()).errors, ['Il faut un bloc Début']);
+  const sim = await (await js('/scenarios/f1/simuler', { graph, caller: '0611', digits: ['1'] }, token)).json();
+  assert.equal(sim.end.kind, 'hangup');
 });
 
 test('double authentification : le code est demandé avant d’ouvrir la session', async () => {

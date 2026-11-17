@@ -1,0 +1,18 @@
+<% const ico = (n) => `<svg class="ico" aria-hidden="true"><use href="#i-${n}"/></svg>`; %>
+<div class="page-head"><div><p class="small"><a href="/scenarios">← Scénarios d’appel</a></p><h1><%= flowId === 'nouveau' ? 'Nouveau scénario' : 'Modifier le scénario' %></h1></div></div>
+<div id="flow-editor" data-base="/scenarios/<%= encodeURIComponent(flowId) %>" data-list="/scenarios" data-template="<%= template %>" data-name="<%= name %>">
+  <div class="card">
+    <div class="toolbar">
+      <input class="input" id="flow-name" placeholder="Nom du scénario" maxlength="100" aria-label="Nom du scénario">
+      <input class="input" id="flow-number" placeholder="N° interne (facultatif)" inputmode="numeric" maxlength="6" aria-label="Numéro interne">
+      <label class="switch"><input type="checkbox" id="flow-enabled"> Actif</label>
+      <span class="grow"></span>
+      <button type="button" class="btn" id="flow-save" disabled><%- ico('check') %> Enregistrer</button>
+    </div>
+    <div id="flow-msg"></div>
+  </div>
+  <div class="editor">
+    <div class="canvas" id="flow-canvas"><noscript><div class="alert info">L’éditeur de scénarios a besoin de JavaScript.</div></noscript><p class="mut">Chargement…</p></div>
+    <div class="inspector" id="flow-panel"></div>
+  </div>
+</div>

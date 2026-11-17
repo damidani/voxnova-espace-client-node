@@ -1,24 +1,49 @@
-<% const days = o.callsPerDay || []; const inbound = days.reduce((n, d) => n + d.inbound, 0), outbound = days.reduce((n, d) => n + d.outbound, 0), missed = days.reduce((n, d) => n + d.missed, 0); %>
-<div class="head"><div><h1>Tableau de bord</h1><p class="mut"><%= me.orgName %></p></div></div>
-<% if (o.service && o.service.ok === false) { %><div class="alert error">Service suspendu<% if (o.service.reason) { %> : <%= o.service.reason %><% } %>. <a href="/factures">Voir l’abonnement</a></div><% } %>
-<div class="grid">
-  <div class="card stat"><div class="l">Appels reçus (30 jours)</div><div class="v"><%= inbound %></div><div class="mut small"><%= missed %> manqué<%= missed > 1 ? 's' : '' %></div></div>
-  <div class="card stat"><div class="l">Appels passés (30 jours)</div><div class="v"><%= outbound %></div><div class="mut small"><%= duration(o.counts && o.counts.talkTimeSec) %> de conversation</div></div>
-  <div class="card stat"><div class="l">Utilisateurs</div><div class="v"><%= o.usage ? o.usage.used : 0 %><% if (o.usage && o.usage.seats) { %><span class="mut small"> / <%= o.usage.seats %></span><% } %></div><% if (o.usage && o.usage.seats) { const pct = Math.min(100, Math.round(o.usage.used / o.usage.seats * 10) * 10); %><div class="bar"><i class="w<%= pct %>"></i></div><% } %></div>
-  <div class="card stat"><div class="l">Numéros</div><div class="v"><%= numbers.length %></div><div class="mut small"><%= o.counts ? o.counts.extensions : 0 %> poste<%= (o.counts && o.counts.extensions > 1) ? 's' : '' %> · <%= o.counts ? o.counts.devices : 0 %> appareil<%= (o.counts && o.counts.devices > 1) ? 's' : '' %></div></div>
+<% const days = o.callsPerDay || []; const inbound = days.reduce((n, d) => n + d.inbound, 0), outbound = days.reduce((n, d) => n + d.outbound, 0), missed = days.reduce((n, d) => n + d.missed, 0);
+   const ico = (n, c) => `<svg class="ico ${c || ''}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+   const hour = Number(new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris', hour: 'numeric' }).replace(/\D/g, ''));
+   const hello = hour < 5 || hour >= 18 ? 'Bonsoir' : 'Bonjour'; const first = String(me.name || '').split(' ')[0];
+   const answeredPct = inbound ? Math.round(((inbound - missed) / inbound) * 100) : null;
+   const unrouted = numbers.filter((n) => !n.destType).length; const activeFlows = flows.filter((f) => f.enabled).length; %>
+<section class="hero">
+  <h1><%= hello %><%= first ? ` ${first}` : '' %> 👋</h1>
+  <p><%= me.orgName %> · <%= inbound + outbound %> appel<%= inbound + outbound > 1 ? 's' : '' %> ces 30 derniers jours<% if (answeredPct !== null) { %>, <%= answeredPct %> % des appels reçus décrochés<% } %>.</p>
+  <div class="actions">
+    <a class="btn solid" href="/scenarios/nouveau?modele=horaires"><%- ico('flow') %> Créer un scénario d’appel</a>
+    <a class="btn" href="/numeros"><%- ico('phone') %> Mes numéros</a>
+    <a class="btn" href="/utilisateurs"><%- ico('users') %> Ajouter un utilisateur</a>
+  </div>
+</section>
+<% if (o.service && o.service.ok === false) { %><div class="alert error"><%- ico('alert') %><span>Service suspendu<% if (o.service.reason) { %> : <%= o.service.reason %><% } %>. <a href="/factures">Voir l’abonnement</a></span></div><% } %>
+<% if (unrouted) { %><div class="alert info"><%- ico('alert') %><span><%= unrouted %> numéro<%= unrouted > 1 ? 's ne sonnent' : ' ne sonne' %> nulle part. <a href="/numeros">Choisir une destination</a></span></div><% } %>
+<div class="grid k4">
+  <div class="card kpi"><span class="chip"><%- ico('in', 'lg') %></span><div><div class="v"><%= inbound %></div><div class="l">Appels reçus</div><div class="s">30 derniers jours</div></div></div>
+  <div class="card kpi"><span class="chip err"><%- ico('missed', 'lg') %></span><div><div class="v"><%= missed %></div><div class="l">Appels manqués</div><div class="s"><%= answeredPct === null ? '—' : `${100 - answeredPct} % des appels reçus` %></div></div></div>
+  <div class="card kpi"><span class="chip ok"><%- ico('out', 'lg') %></span><div><div class="v"><%= outbound %></div><div class="l">Appels passés</div><div class="s"><%= duration(o.counts && o.counts.talkTimeSec) %> de conversation</div></div></div>
+  <div class="card kpi"><span class="chip warn"><%- ico('users', 'lg') %></span><div><div class="v"><%= o.usage ? o.usage.used : 0 %><% if (o.usage && o.usage.seats) { %><span class="mut small"> / <%= o.usage.seats %></span><% } %></div><div class="l">Utilisateurs</div><% if (o.usage && o.usage.seats) { const pct = Math.min(100, Math.round(o.usage.used / o.usage.seats * 10) * 10); %><div class="meter"><i class="w<%= pct %>"></i></div><% } else { %><div class="s"><%= o.counts ? o.counts.extensions : 0 %> poste<%= (o.counts && o.counts.extensions > 1) ? 's' : '' %></div><% } %></div></div>
 </div>
-<div class="card">
-  <h2>Abonnement</h2>
-  <% if (o.license) { %>
-    <p><b><%= o.license.plan ? o.license.plan.name : 'Offre' %></b> · <%= o.license.seats %> poste<%= o.license.seats > 1 ? 's' : '' %> · jusqu’au <%= dateFr(o.license.expiresAt) %> <span class="badge <%= o.license.status === 'ACTIVE' ? 'ok' : 'err' %>"><%= o.license.status === 'ACTIVE' ? 'Actif' : 'Paiement en attente' %></span></p>
-  <% } else if (o.org && o.org.status === 'TRIAL') { %>
-    <p>Période d’essai<% if (o.org.trialEndsAt) { %> jusqu’au <b><%= dateFr(o.org.trialEndsAt) %></b><% } %>.</p>
-  <% } else { %><p class="mut">Aucun abonnement en cours.</p><% } %>
-  <a href="/factures">Abonnement et factures</a>
+<div class="grid c2">
+  <div class="card">
+    <div class="card-head"><h2>Activité des 30 derniers jours</h2><div class="legend"><span><i class="in"></i>Reçus</span><span><i class="out"></i>Passés</span></div></div>
+    <div data-chart="<%= JSON.stringify(days) %>"><p class="mut small">Graphique disponible avec JavaScript.</p></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2><span class="live-dot"></span> En ce moment</h2></div>
+    <div data-live="/appels-en-cours"><div class="empty small">Chargement…</div></div>
+  </div>
 </div>
-<div class="card">
-  <h2>Vos numéros</h2>
-  <% if (!numbers.length) { %><p class="mut">Aucun numéro pour l’instant. <a href="/numeros">Obtenir un numéro</a></p><% } else { %>
-  <ul><% for (const n of numbers) { %><li><b><%= phone(n.number) %></b><% if (n.label) { %> · <%= n.label %><% } %><% if (!n.destType) { %> <span class="badge err">non routé</span><% } %></li><% } %></ul>
-  <a href="/numeros">Gérer les numéros</a><% } %>
+<div class="grid c2e">
+  <div class="card">
+    <div class="card-head"><h2>Derniers appels</h2><a class="small" href="/appels">Tout le journal</a></div>
+    <% if (!recent.length) { %><div class="empty"><%- ico('history') %><b>Aucun appel pour l’instant</b></div><% } else { %>
+    <ul class="list"><% for (const c of recent) { const miss = c.direction === 'INBOUND' && !c.answeredAt; const kind = miss ? 'miss' : c.direction === 'OUTBOUND' ? 'out' : 'in'; %>
+      <li><span class="dir <%= kind %>"><%- ico(miss ? 'missed' : c.direction === 'OUTBOUND' ? 'out' : 'in') %></span><div class="grow"><b><%= c.direction === 'OUTBOUND' ? phone(c.destination) : (c.callerName || phone(c.callerNumber)) %></b><span class="small mut"><%= dateTimeFr(c.startedAt) %></span></div><span class="small <%= miss ? '' : 'mut' %>"><%- miss ? '<span class="badge err">Manqué</span>' : duration(c.billSec) %></span></li>
+    <% } %></ul><% } %>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Vos numéros</h2><a class="small" href="/numeros">Gérer</a></div>
+    <% if (!numbers.length) { %><div class="empty"><%- ico('phone') %><b>Aucun numéro</b><a href="/numeros">Obtenir un numéro</a></div><% } else { %>
+    <ul class="list"><% for (const n of numbers.slice(0, 6)) { %><li><span class="dir in"><%- ico('phone') %></span><div class="grow"><b class="num"><%= phone(n.number) %></b><span class="small mut"><%= n.label || '' %></span></div><%- n.destType ? `<span class="badge ${n.destType === 'FLOW' ? 'brand' : 'ok'}">${n.destType === 'FLOW' ? 'Scénario' : 'Routé'}</span>` : '<span class="badge err">Non routé</span>' %></li><% } %></ul><% } %>
+    <p class="small mut"><%- ico('flow') %> <%= activeFlows %> scénario<%= activeFlows > 1 ? 's' : '' %> actif<%= activeFlows > 1 ? 's' : '' %> · <a href="/scenarios">Scénarios d’appel</a></p>
+    <p class="small mut"><%- ico('invoice') %> <% if (o.license) { %><%= o.license.plan ? o.license.plan.name : 'Offre' %> · jusqu’au <%= dateFr(o.license.expiresAt) %><% } else if (o.org && o.org.status === 'TRIAL') { %>Essai<% if (o.org.trialEndsAt) { %> jusqu’au <%= dateFr(o.org.trialEndsAt) %><% } %><% } else { %>Aucun abonnement<% } %> · <a href="/factures">Abonnement</a></p>
+  </div>
 </div>
