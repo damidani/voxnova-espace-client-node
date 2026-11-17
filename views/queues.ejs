@@ -1,0 +1,38 @@
+<% const extName = (id) => { const e = extensions.find((x) => x.id === id); return e ? `${e.number} · ${e.displayName}` : 'Poste supprimé'; }; %>
+<div class="head"><div><h1>Files d’attente</h1><p class="mut">Les appels attendent en musique jusqu’à ce qu’un agent se libère.</p></div></div>
+<% for (const q of queues) { %>
+<div class="card">
+  <h2><%= q.number %> · <%= q.name %></h2>
+  <p class="mut small"><%= strategies[q.strategy] || q.strategy %> · attente maximale <%= Math.round(q.maxWaitSeconds / 60) %> min · <%= q.members.length %> agent<%= q.members.length > 1 ? 's' : '' %><% if (q.members.length) { %> : <%= q.members.map(extName).join(', ') %><% } %></p>
+  <details><summary>Modifier</summary>
+    <form method="post" action="/files/<%= q.id %>">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="row">
+        <div><label>Nom</label><input class="input" name="name" value="<%= q.name %>" required maxlength="100"></div>
+        <div><label>Répartition des appels</label><select name="strategy"><% for (const [k, l] of Object.entries(strategies)) { %><option value="<%= k %>" <%= k === q.strategy ? 'selected' : '' %>><%= l %></option><% } %></select></div>
+        <div><label>Attente maximale (secondes)</label><input class="input" name="maxWaitSeconds" type="number" min="10" max="3600" value="<%= q.maxWaitSeconds %>"></div>
+      </div>
+      <label>Agents</label>
+      <div class="checks"><% for (const e of extensions) { %><label><input type="checkbox" name="members" value="<%= e.id %>" <%= q.members.includes(e.id) ? 'checked' : '' %>> <%= e.number %> · <%= e.displayName %></label><% } %></div>
+      <button class="btn">Enregistrer</button>
+    </form>
+    <form method="post" action="/files/<%= q.id %>/supprimer"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn danger">Supprimer cette file</button></form>
+  </details>
+</div>
+<% } %>
+<% if (!queues.length) { %><div class="card"><p class="mut">Aucune file d’attente pour l’instant.</p></div><% } %>
+<div class="card">
+  <h2>Nouvelle file d’attente</h2>
+  <form method="post" action="/files">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="row">
+      <div><label for="qn">Numéro interne</label><input class="input" id="qn" name="number" pattern="\d{2,6}" placeholder="600" required></div>
+      <div><label for="qname">Nom</label><input class="input" id="qname" name="name" placeholder="Service client" required maxlength="100"></div>
+      <div><label for="qs">Répartition des appels</label><select id="qs" name="strategy"><% for (const [k, l] of Object.entries(strategies)) { %><option value="<%= k %>"><%= l %></option><% } %></select></div>
+    </div>
+    <label>Agents</label>
+    <div class="checks"><% for (const e of extensions) { %><label><input type="checkbox" name="members" value="<%= e.id %>"> <%= e.number %> · <%= e.displayName %></label><% } %></div>
+    <button class="btn">Créer la file</button>
+    <p class="mut small">Pour que vos appels y arrivent, choisissez ensuite cette file comme destination d’un numéro (page Numéros).</p>
+  </form>
+</div>

@@ -1,0 +1,24 @@
+<div class="head"><div><h1>Messagerie vocale</h1><p class="mut"><%= vm.unread %> message<%= vm.unread > 1 ? 's' : '' %> non écouté<%= vm.unread > 1 ? 's' : '' %></p></div></div>
+<% for (const box of vm.boxes) { %>
+<div class="card scroll">
+  <h2><%= box.number %> · <%= box.name %> <% if (box.unread) { %><span class="badge ok"><%= box.unread %> nouveau<%= box.unread > 1 ? 'x' : '' %></span><% } %></h2>
+  <% if (!box.messages.length) { %><p class="mut">Aucun message.</p><% } else { %>
+  <table class="table">
+    <thead><tr><th>Reçu le</th><th>De</th><th>Message</th><th></th></tr></thead>
+    <tbody>
+    <% for (const m of box.messages) { %>
+      <tr>
+        <td><%= dateTimeFr(m.createdAt) %> <% if (!m.read) { %><span class="badge ok">Nouveau</span><% } %></td>
+        <td><%= phone(m.callerNumber) %><% if (m.callerName) { %> <span class="mut small"><%= m.callerName %></span><% } %></td>
+        <td class="small"><%= m.transcript || '—' %></td>
+        <td>
+          <form class="inline" method="post" action="/messagerie/<%= box.number %>/<%= m.uuid %>/ecouter"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn small">Écouter</button></form>
+          <form class="inline" method="post" action="/messagerie/<%= box.number %>/<%= m.uuid %>/supprimer"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn danger small">Supprimer</button></form>
+        </td>
+      </tr>
+    <% } %>
+    </tbody>
+  </table><% } %>
+</div>
+<% } %>
+<% if (!vm.boxes.length) { %><div class="card"><p class="mut">Aucune messagerie vocale activée.</p></div><% } %>

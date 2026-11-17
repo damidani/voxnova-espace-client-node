@@ -1,0 +1,14 @@
+<div class="card">
+  <h1>Nouveau mot de passe</h1>
+  <% if (typeof error !== 'undefined' && error) { %><div class="alert error" role="alert"><%= error %></div><% } %>
+  <form method="post" action="/reinitialiser">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <input type="hidden" name="token" value="<%= token %>">
+    <label for="password">Nouveau mot de passe</label>
+    <input class="input" id="password" name="password" type="password" minlength="10" autocomplete="new-password" required autofocus>
+    <label for="confirm">Confirmation</label>
+    <input class="input" id="confirm" name="confirm" type="password" minlength="10" autocomplete="new-password" required>
+    <p class="mut small">10 caractères au moins.</p>
+    <button class="btn">Enregistrer</button>
+  </form>
+</div>

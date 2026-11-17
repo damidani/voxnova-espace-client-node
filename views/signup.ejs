@@ -1,0 +1,18 @@
+<div class="card">
+  <h1>Créer mon compte</h1>
+  <p class="mut">Essai gratuit, sans engagement.</p>
+  <% if (typeof error !== 'undefined' && error) { %><div class="alert error" role="alert"><%= error %></div><% } %>
+  <form method="post" action="/inscription">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <label for="company">Entreprise</label>
+    <input class="input" id="company" name="company" value="<%= v.company || '' %>" required minlength="2" maxlength="100">
+    <label for="name">Votre nom</label>
+    <input class="input" id="name" name="name" value="<%= v.name || '' %>" required minlength="2" maxlength="100" autocomplete="name">
+    <label for="email">E-mail</label>
+    <input class="input" id="email" name="email" type="email" value="<%= v.email || '' %>" required autocomplete="email">
+    <label for="password">Mot de passe</label>
+    <input class="input" id="password" name="password" type="password" minlength="10" required autocomplete="new-password">
+    <button class="btn">Créer mon compte</button>
+  </form>
+  <div class="links"><a href="/connexion">J’ai déjà un compte</a></div>
+</div>

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<% if (typeof url !== 'undefined' && title === 'Ouverture du panneau') { %><meta http-equiv="refresh" content="0;url=<%= url %>"><% } %>
+<title><%= title %> · <%= brand.name %></title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/theme.css">
+</head>
+<body>
+<% if (me) { %>
+<header class="top"><div class="top-in">
+  <a class="logo" href="/"><% if (brand.logoUrl) { %><img src="<%= brand.logoUrl %>" alt="<%= brand.name %>"><% } else { %><span class="dot"></span><%= brand.name %><% } %></a>
+  <nav class="nav" aria-label="Menu">
+    <% const items = me.role === 'ORG_ADMIN' ? [['/', 'Tableau de bord'], ['/utilisateurs', 'Utilisateurs'], ['/numeros', 'Numéros'], ['/files', 'Files d’attente'], ['/appels', 'Appels'], ['/messagerie', 'Messagerie'], ['/sms', 'SMS'], ['/factures', 'Factures']] : [['/', 'Accueil']]; %>
+    <% for (const [href, label] of items) { %><a href="<%= href %>" class="<%= (href === '/' ? path === '/' : path.startsWith(href)) ? 'on' : '' %>"><%= label %></a><% } %>
+  </nav>
+  <div class="who">
+    <span class="mut small"><%= me.name %> · <%= me.orgName %></span>
+    <form class="inline" method="post" action="/panneau"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn ghost small" title="Toutes les fonctions avancées">Panneau complet</button></form>
+    <form class="inline" method="post" action="/deconnexion"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn ghost small">Déconnexion</button></form>
+  </div>
+</div></header>
+<main>
+  <% if (flash) { %><div class="alert <%= flash.type %>" role="status"><%= flash.text %></div><% } %>
+  <%- body %>
+</main>
+<footer><%= brand.name %><% if (brand.supportEmail) { %> · <a href="mailto:<%= brand.supportEmail %>"><%= brand.supportEmail %></a><% } %><% if (brand.supportPhone) { %> · <%= brand.supportPhone %><% } %></footer>
+<% } else { %>
+<div class="auth">
+  <div class="logo"><% if (brand.logoUrl) { %><img src="<%= brand.logoUrl %>" alt="<%= brand.name %>"><% } else { %><span class="dot"></span><%= brand.name %><% } %></div>
+  <% if (flash) { %><div class="alert <%= flash.type %>" role="status"><%= flash.text %></div><% } %>
+  <%- body %>
+  <p class="mut small"><% if (brand.supportEmail) { %>Besoin d’aide ? <a href="mailto:<%= brand.supportEmail %>"><%= brand.supportEmail %></a><% } %></p>
+</div>
+<% } %>
+</body>
+</html>

@@ -1,0 +1,20 @@
+<% const pages = Math.max(1, Math.ceil((cdr.total || 0) / 50)); const q = (p) => `?page=${p}${direction ? `&sens=${direction}` : ''}${answered ? `&repondu=${answered}` : ''}`; const sens = { INBOUND: 'Entrant', OUTBOUND: 'Sortant', INTERNAL: 'Interne' }; %>
+<div class="head"><div><h1>Journal des appels</h1><p class="mut"><%= cdr.total || 0 %> appel<%= cdr.total > 1 ? 's' : '' %></p></div>
+  <form class="row" method="get" action="/appels">
+    <div><select name="sens" aria-label="Sens"><option value="">Tous les sens</option><% for (const [k, l] of Object.entries(sens)) { %><option value="<%= k %>" <%= k === direction ? 'selected' : '' %>><%= l %></option><% } %></select></div>
+    <div><select name="repondu" aria-label="Réponse"><option value="">Répondus et manqués</option><option value="yes" <%= answered === 'yes' ? 'selected' : '' %>>Répondus</option><option value="no" <%= answered === 'no' ? 'selected' : '' %>>Manqués</option></select></div>
+    <div class="fit"><button class="btn ghost">Filtrer</button></div>
+  </form>
+</div>
+<div class="card scroll">
+  <table class="table">
+    <thead><tr><th>Date</th><th>Sens</th><th>De</th><th>Vers</th><th>Durée</th><th></th></tr></thead>
+    <tbody>
+    <% for (const c of cdr.items) { %>
+      <tr><td><%= dateTimeFr(c.startedAt) %></td><td><%= sens[c.direction] || c.direction %></td><td><%= phone(c.callerNumber) %><% if (c.callerName) { %> <span class="mut small"><%= c.callerName %></span><% } %></td><td><%= phone(c.destination) %></td><td><%= c.answeredAt ? duration(c.billSec) : '—' %></td><td><%- c.answeredAt ? '' : '<span class="badge err">Manqué</span>' %></td></tr>
+    <% } %>
+    <% if (!cdr.items.length) { %><tr><td colspan="6" class="mut">Aucun appel.</td></tr><% } %>
+    </tbody>
+  </table>
+  <% if (pages > 1) { %><div class="pager"><% if (pageNo > 1) { %><a class="btn ghost small" href="/appels<%= q(pageNo - 1) %>">Précédent</a><% } %><span class="mut small">Page <%= pageNo %> / <%= pages %></span><% if (pageNo < pages) { %><a class="btn ghost small" href="/appels<%= q(pageNo + 1) %>">Suivant</a><% } %></div><% } %>
+</div>

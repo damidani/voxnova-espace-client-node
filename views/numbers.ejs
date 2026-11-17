@@ -1,0 +1,46 @@
+<div class="head"><div><h1>Numéros</h1><p class="mut">Où sonne chacun de vos numéros, et nouveaux numéros.</p></div></div>
+<div class="card scroll">
+  <% if (!numbers.length) { %><p class="mut">Aucun numéro pour l’instant.</p><% } else { %>
+  <table class="table">
+    <thead><tr><th>Numéro</th><th>Nom</th><th>Où il sonne</th></tr></thead>
+    <tbody>
+    <% for (const n of numbers) { const cur = n.destType ? `${n.destType}:${n.destId || ''}` : ''; let found = false; %>
+      <tr>
+        <td><b><%= phone(n.number) %></b></td><td><%= n.label || '—' %></td>
+        <td>
+          <form class="row" method="post" action="/numeros/<%= n.id %>">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <select name="dest" aria-label="Destination de <%= phone(n.number) %>">
+              <option value="">Non routé</option>
+              <% for (const [type, list] of Object.entries(destinations)) { if (!labels[type] || !list.length) continue; %>
+                <optgroup label="<%= labels[type] %>"><% for (const d of list) { const v = `${type}:${d.id}`; if (v === cur) found = true; %><option value="<%= v %>" <%= v === cur ? 'selected' : '' %>><%= d.label %></option><% } %></optgroup>
+              <% } %>
+              <% if (cur && !found) { %><option value="<%= cur %>" selected>Réglage actuel (panneau complet)</option><% } %>
+            </select>
+            <div class="fit"><button class="btn small">Enregistrer</button></div>
+          </form>
+        </td>
+      </tr>
+    <% } %>
+    </tbody>
+  </table><% } %>
+</div>
+<div class="card">
+  <h2>Obtenir un nouveau numéro</h2>
+  <form class="row" method="get" action="/numeros">
+    <div><label for="zone">Zone</label><select id="zone" name="zone"><% for (const [z, l] of [['01', '01 · Île-de-France'], ['02', '02 · Nord-Ouest'], ['03', '03 · Nord-Est'], ['04', '04 · Sud-Est'], ['05', '05 · Sud-Ouest'], ['09', '09 · Non géographique']]) { %><option value="<%= z %>" <%= z === area ? 'selected' : '' %>><%= l %></option><% } %></select></div>
+    <div class="fit"><button class="btn ghost">Voir les numéros disponibles</button></div>
+  </form>
+  <% if (shop) { %>
+    <% if (!shop.eligible) { %><div class="alert info"><%= shop.reason %></div>
+    <% } else if (!shop.numbers.length) { %><p class="mut">Aucun numéro disponible dans cette zone pour le moment.</p>
+    <% } else { %>
+      <p class="mut small"><%= shop.included ? `Inclus dans votre offre (${shop.owned} sur ${shop.allowed} utilisés).` : `${money(shop.priceCents)} HT par mois ; ${money(shop.prorataCents)} HT facturés au prorata jusqu’à votre prochaine échéance.` %></p>
+      <form method="post" action="/numeros/acheter">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <div class="checks"><% for (const num of shop.numbers) { %><label><input type="radio" name="number" value="<%= num %>" required> <%= phone(num) %></label><% } %></div>
+        <button class="btn">Prendre ce numéro</button>
+      </form>
+    <% } %>
+  <% } %>
+</div>

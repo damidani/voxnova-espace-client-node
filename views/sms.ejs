@@ -1,0 +1,38 @@
+<% const m = balance && balance.metered; const pages = history ? Math.max(1, Math.ceil(history.total / history.pageSize)) : 1; const st = { queued: 'En file', sent: 'Envoyé', delivered: 'Remis', read: 'Lu', failed: 'Échec', waiting: 'En attente', received: 'Reçu' };
+   const months = Array.from({ length: 12 }, (_, i) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i); return d.toISOString().slice(0, 7); }); %>
+<div class="head"><div><h1>SMS</h1><p class="mut">Envoyez un SMS depuis le numéro de votre entreprise et suivez vos envois.</p></div></div>
+<% if (balance && balance.error) { %><div class="alert info"><%= balance.error %></div><% } else if (balance) { %>
+<div class="grid">
+  <div class="card stat"><div class="l">Forfait du mois</div><div class="v"><%= balance.monthlyUsed %> <span class="mut small">/ <%= balance.monthlyLimit %></span></div></div>
+  <div class="card stat"><div class="l">Solde de SMS</div><div class="v"><%= balance.balance %></div></div>
+  <div class="card stat"><div class="l">Au comptage ce mois-ci</div><% if (m && m.enabled) { %><div class="v"><%= m.monthUsed %><% if (m.cap != null) { %> <span class="mut small">/ <%= m.cap %></span><% } %></div><div class="mut small"><%= money(m.monthCents) %> HT · <%= (m.unitPriceCents / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) %> € le SMS</div><% } else { %><div class="mut">Non activé</div><% } %></div>
+</div><% } %>
+<div class="card">
+  <h2>Envoyer un SMS</h2>
+  <form method="post" action="/sms">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="row"><div><label for="to">Destinataire (mobile)</label><input class="input" id="to" name="to" type="tel" placeholder="06 12 34 56 78" required></div></div>
+    <label for="text">Message</label>
+    <textarea id="text" name="text" rows="3" maxlength="1000" required></textarea>
+    <p class="mut small">160 caractères par SMS (70 avec ê, â, î, ô, û, ç ou un emoji). Un message plus long compte plusieurs SMS.</p>
+    <button class="btn">Envoyer</button>
+  </form>
+</div>
+<div class="card scroll">
+  <div class="head"><h2>Historique</h2>
+    <form class="row" method="get" action="/sms"><div><select name="mois" aria-label="Mois"><% for (const mo of months) { %><option value="<%= mo %>" <%= mo === month ? 'selected' : '' %>><%= new Date(mo + '-15').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) %></option><% } %></select></div><div class="fit"><button class="btn ghost small">Afficher</button></div></form>
+  </div>
+  <% if (!history) { %><p class="mut">Historique indisponible.</p><% } else { %>
+  <p class="mut small"><%= history.total %> message<%= history.total > 1 ? 's' : '' %> · <%= history.totals.smsSegments %> SMS comptés<% if (history.totals.meteredSegments) { %> · dont <%= history.totals.meteredSegments %> au comptage (<%= money(history.totals.meteredCents) %> HT)<% } %></p>
+  <table class="table">
+    <thead><tr><th>Date</th><th>Destinataire</th><th>État</th><th>SMS</th><th>Message</th></tr></thead>
+    <tbody>
+    <% for (const x of history.items) { %>
+      <tr><td><%= dateTimeFr(x.createdAt) %></td><td><%= phone(x.to) %></td><td><span class="badge <%= x.status === 'failed' ? 'err' : (['sent', 'delivered', 'read'].includes(x.status) ? 'ok' : '') %>"><%= st[x.status] || x.status %></span><% if (x.status === 'failed' && x.error) { %><div class="mut small"><%= x.error %></div><% } %></td><td><%= x.channel === 'whatsapp' || x.status === 'received' ? '—' : x.segments %></td><td class="small"><%= x.text %></td></tr>
+    <% } %>
+    <% if (!history.items.length) { %><tr><td colspan="5" class="mut">Aucun message ce mois-ci.</td></tr><% } %>
+    </tbody>
+  </table>
+  <% if (pages > 1) { %><div class="pager"><% if (pageNo > 1) { %><a class="btn ghost small" href="/sms?mois=<%= month %>&page=<%= pageNo - 1 %>">Précédent</a><% } %><span class="mut small">Page <%= pageNo %> / <%= pages %></span><% if (pageNo < pages) { %><a class="btn ghost small" href="/sms?mois=<%= month %>&page=<%= pageNo + 1 %>">Suivant</a><% } %></div><% } %>
+  <% } %>
+</div>

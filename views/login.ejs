@@ -1,0 +1,22 @@
+<div class="card">
+  <h1>Connexion</h1>
+  <p class="mut">Votre espace client <%= brand.name %>.</p>
+  <% if (typeof error !== 'undefined' && error) { %><div class="alert error" role="alert"><%= error %></div><% } %>
+  <form method="post" action="/connexion">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <% if (step === 'code') { %>
+      <input type="hidden" name="email" value="<%= email %>">
+      <input type="hidden" name="password" value="<%= password %>">
+      <label for="code">Code de vérification</label>
+      <input class="input" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" required autofocus>
+      <p class="mut small">Saisissez le code de votre application d’authentification (ou un code de secours).</p>
+    <% } else { %>
+      <label for="email">E-mail</label>
+      <input class="input" id="email" name="email" type="email" autocomplete="username" value="<%= email %>" required autofocus>
+      <label for="password">Mot de passe</label>
+      <input class="input" id="password" name="password" type="password" autocomplete="current-password" required>
+    <% } %>
+    <button class="btn">Se connecter</button>
+  </form>
+  <div class="links"><a href="/mot-de-passe-oublie">Mot de passe oublié ?</a><% if (allowSignup) { %><a href="/inscription">Créer un compte</a><% } %></div>
+</div>

@@ -1,0 +1,24 @@
+<% const days = o.callsPerDay || []; const inbound = days.reduce((n, d) => n + d.inbound, 0), outbound = days.reduce((n, d) => n + d.outbound, 0), missed = days.reduce((n, d) => n + d.missed, 0); %>
+<div class="head"><div><h1>Tableau de bord</h1><p class="mut"><%= me.orgName %></p></div></div>
+<% if (o.service && o.service.ok === false) { %><div class="alert error">Service suspendu<% if (o.service.reason) { %> : <%= o.service.reason %><% } %>. <a href="/factures">Voir l’abonnement</a></div><% } %>
+<div class="grid">
+  <div class="card stat"><div class="l">Appels reçus (30 jours)</div><div class="v"><%= inbound %></div><div class="mut small"><%= missed %> manqué<%= missed > 1 ? 's' : '' %></div></div>
+  <div class="card stat"><div class="l">Appels passés (30 jours)</div><div class="v"><%= outbound %></div><div class="mut small"><%= duration(o.counts && o.counts.talkTimeSec) %> de conversation</div></div>
+  <div class="card stat"><div class="l">Utilisateurs</div><div class="v"><%= o.usage ? o.usage.used : 0 %><% if (o.usage && o.usage.seats) { %><span class="mut small"> / <%= o.usage.seats %></span><% } %></div><% if (o.usage && o.usage.seats) { const pct = Math.min(100, Math.round(o.usage.used / o.usage.seats * 10) * 10); %><div class="bar"><i class="w<%= pct %>"></i></div><% } %></div>
+  <div class="card stat"><div class="l">Numéros</div><div class="v"><%= numbers.length %></div><div class="mut small"><%= o.counts ? o.counts.extensions : 0 %> poste<%= (o.counts && o.counts.extensions > 1) ? 's' : '' %> · <%= o.counts ? o.counts.devices : 0 %> appareil<%= (o.counts && o.counts.devices > 1) ? 's' : '' %></div></div>
+</div>
+<div class="card">
+  <h2>Abonnement</h2>
+  <% if (o.license) { %>
+    <p><b><%= o.license.plan ? o.license.plan.name : 'Offre' %></b> · <%= o.license.seats %> poste<%= o.license.seats > 1 ? 's' : '' %> · jusqu’au <%= dateFr(o.license.expiresAt) %> <span class="badge <%= o.license.status === 'ACTIVE' ? 'ok' : 'err' %>"><%= o.license.status === 'ACTIVE' ? 'Actif' : 'Paiement en attente' %></span></p>
+  <% } else if (o.org && o.org.status === 'TRIAL') { %>
+    <p>Période d’essai<% if (o.org.trialEndsAt) { %> jusqu’au <b><%= dateFr(o.org.trialEndsAt) %></b><% } %>.</p>
+  <% } else { %><p class="mut">Aucun abonnement en cours.</p><% } %>
+  <a href="/factures">Abonnement et factures</a>
+</div>
+<div class="card">
+  <h2>Vos numéros</h2>
+  <% if (!numbers.length) { %><p class="mut">Aucun numéro pour l’instant. <a href="/numeros">Obtenir un numéro</a></p><% } else { %>
+  <ul><% for (const n of numbers) { %><li><b><%= phone(n.number) %></b><% if (n.label) { %> · <%= n.label %><% } %><% if (!n.destType) { %> <span class="badge err">non routé</span><% } %></li><% } %></ul>
+  <a href="/numeros">Gérer les numéros</a><% } %>
+</div>

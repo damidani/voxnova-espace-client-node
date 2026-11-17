@@ -1,0 +1,7 @@
+<div class="head"><div><h1>Bonjour <%= me.name %></h1><p class="mut"><%= me.orgName %></p></div></div>
+<div class="card">
+  <h2>Votre téléphone</h2>
+  <p>Vos appels, votre messagerie vocale, vos renvois et vos applications se gèrent depuis le panneau complet.</p>
+  <form class="inline" method="post" action="/panneau"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn">Ouvrir mon espace téléphone</button></form>
+  <p class="mut small">La gestion de l’entreprise (utilisateurs, numéros, factures) est réservée à ses administrateurs.</p>
+</div>

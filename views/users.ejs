@@ -1,0 +1,32 @@
+<% const extOf = (u) => extensions.filter((e) => e.userId === u.id).map((e) => e.number); const status = { ACTIVE: ['Actif', 'ok'], INVITED: ['Invité', ''], DISABLED: ['Désactivé', 'err'] }; %>
+<div class="head"><div><h1>Utilisateurs</h1><p class="mut">Les personnes de votre entreprise et leur poste.</p></div></div>
+<div class="card scroll">
+  <table class="table">
+    <thead><tr><th>Nom</th><th>E-mail</th><th>Rôle</th><th>Poste</th><th>État</th><th>Dernière connexion</th><th></th></tr></thead>
+    <tbody>
+    <% for (const u of users) { const s = status[u.status] || [u.status, '']; %>
+      <tr>
+        <td><b><%= u.name %></b></td><td><%= u.email %></td>
+        <td><%= u.role === 'ORG_ADMIN' ? 'Administrateur' : 'Utilisateur' %></td>
+        <td><%= extOf(u).join(', ') || '—' %></td>
+        <td><span class="badge <%= s[1] %>"><%= s[0] %></span></td>
+        <td class="mut small"><%= dateTimeFr(u.lastLoginAt) %></td>
+        <td><% if (u.id !== me.id) { %><form class="inline" method="post" action="/utilisateurs/<%= u.id %>/supprimer"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn danger small" aria-label="Supprimer <%= u.name %>">Supprimer</button></form><% } %></td>
+      </tr>
+    <% } %>
+    </tbody>
+  </table>
+</div>
+<div class="card">
+  <h2>Ajouter un utilisateur</h2>
+  <form method="post" action="/utilisateurs">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="row">
+      <div><label for="name">Nom</label><input class="input" id="name" name="name" required minlength="2" maxlength="100"></div>
+      <div><label for="email">E-mail</label><input class="input" id="email" name="email" type="email" required></div>
+      <div><label for="role">Rôle</label><select id="role" name="role"><option value="USER">Utilisateur</option><option value="ORG_ADMIN">Administrateur</option></select></div>
+      <div class="fit"><button class="btn">Ajouter</button></div>
+    </div>
+    <p class="mut small">Il reçoit une invitation par e-mail pour choisir son mot de passe ; son poste est créé automatiquement.</p>
+  </form>
+</div>

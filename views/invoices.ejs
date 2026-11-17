@@ -1,0 +1,22 @@
+<% const st = { PAID: ['Payée', 'ok'], OPEN: ['À régler', 'err'], FAILED: ['Paiement refusé', 'err'], CANCELLED: ['Annulée', ''], REFUNDED: ['Remboursée', ''] }; %>
+<div class="head"><div><h1>Abonnement et factures</h1></div></div>
+<div class="card">
+  <h2>Votre abonnement</h2>
+  <% if (b.current) { %>
+    <p><b><%= b.current.plan ? b.current.plan.name : 'Offre' %></b> · <%= b.current.seats %> poste<%= b.current.seats > 1 ? 's' : '' %> · prochaine échéance le <%= dateFr(b.current.expiresAt) %></p>
+  <% } else { %><p class="mut">Aucun abonnement en cours<% if (b.org && b.org.status === 'TRIAL' && b.org.trialEndsAt) { %> : période d’essai jusqu’au <%= dateFr(b.org.trialEndsAt) %><% } %>.</p><% } %>
+  <% if (brand.supportEmail) { %><p class="mut small">Pour changer d’offre : <a href="mailto:<%= brand.supportEmail %>"><%= brand.supportEmail %></a>.</p><% } %>
+</div>
+<div class="card scroll">
+  <h2>Factures</h2>
+  <% const list = (b.invoices || []).filter((i) => !i.hidden); %>
+  <% if (!list.length) { %><p class="mut">Aucune facture pour l’instant.</p><% } else { %>
+  <table class="table">
+    <thead><tr><th>Numéro</th><th>Date</th><th>Montant TTC</th><th>État</th><th></th></tr></thead>
+    <tbody>
+    <% for (const i of list) { const s = st[i.status] || [i.status, '']; %>
+      <tr><td><b><%= i.number %></b><% if (i.kind === 'CREDIT_NOTE') { %> <span class="badge">Avoir</span><% } %></td><td><%= dateFr(i.createdAt) %></td><td><%= money(i.totalCents) %></td><td><span class="badge <%= s[1] %>"><%= s[0] %></span></td><td><a class="btn ghost small" href="/factures/<%= i.id %>.pdf" target="_blank" rel="noopener">PDF</a></td></tr>
+    <% } %>
+    </tbody>
+  </table><% } %>
+</div>
