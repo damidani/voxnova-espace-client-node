@@ -411,6 +411,8 @@
       var tpl = root.getAttribute('data-template');
       state.flow = data.flow || { name: '', number: null, enabled: true };
       state.graph = data.flow ? JSON.parse(JSON.stringify(data.flow.graph || { nodes: [], edges: [] })) : tplGraph(tpl || 'vierge');
+      state.graph.nodes = state.graph.nodes || []; state.graph.edges = state.graph.edges || [];
+      state.graph.nodes.forEach(function (n) { if (!n.data || Array.isArray(n.data)) n.data = {}; });
       if (!state.graph.nodes.some(function (n) { return n.type === 'start'; })) state.graph.nodes.unshift({ id: 'debut', type: 'start', position: { x: 0, y: 0 }, data: {} });
       $('#flow-name').value = state.flow.name || root.getAttribute('data-name') || '';
       $('#flow-number').value = state.flow.number || '';
