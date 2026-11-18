@@ -87,8 +87,9 @@
     message: { label: 'SMS', icon: 'message', desc: 'Envoyer un SMS à l’appelant' },
     callback: { label: 'Rappel', icon: 'callback', desc: 'Rappeler dès que possible' },
     hangup: { label: 'Raccrocher', icon: 'x', desc: 'Fin de l’appel' },
+    http: { label: 'Requête HTTP', icon: 'zap', desc: 'Interroger votre CRM ou votre API' },
   };
-  var EDITABLE = ['play', 'menu', 'time', 'queue', 'transfer', 'voicemail', 'message', 'callback', 'hangup'];
+  var EDITABLE = ['play', 'menu', 'time', 'queue', 'transfer', 'voicemail', 'message', 'callback', 'http', 'hangup'];
   var DEFAULTS = {
     play: function () { return { audioId: null }; },
     menu: function () { return { digits: ['1', '2'], timeoutSeconds: 5, maxTries: 3 }; },
@@ -99,8 +100,9 @@
     message: function () { return { pref: 'sms', toMode: 'caller', text: 'Merci pour votre appel. Nous revenons vers vous rapidement.' }; },
     callback: function () { return { targetType: 'queue', targetId: firstId('QUEUE') }; },
     hangup: function () { return { cause: 'NORMAL_CLEARING' }; },
+    http: function () { return { method: 'GET', url: 'https://', timeoutMs: 3000, headers: [], mappings: [] }; },
   };
-  var OUT_LABELS = { next: 'Ensuite', invalid: 'Mauvaise touche', noinput: 'Aucune touche', open: 'Ouvert', closed: 'Fermé', fallback: 'Personne ne répond', exit: 'L’appelant quitte la file', success: 'Succès', error: 'Erreur', 'true': 'Oui', 'false': 'Non', a: 'Groupe A', b: 'Groupe B', premium: 'Premium', found: 'Client connu', notfound: 'Client inconnu', noanswer: 'Pas de réponse', none: 'Aucun' };
+  var OUT_LABELS = { success: 'Succès', next: 'Ensuite', invalid: 'Mauvaise touche', noinput: 'Aucune touche', open: 'Ouvert', closed: 'Fermé', fallback: 'Personne ne répond', exit: 'L’appelant quitte la file', success: 'Succès', error: 'Erreur', 'true': 'Oui', 'false': 'Non', a: 'Groupe A', b: 'Groupe B', premium: 'Premium', found: 'Client connu', notfound: 'Client inconnu', noanswer: 'Pas de réponse', none: 'Aucun' };
   var DAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
   var DEST_TYPES = { EXTENSION: 'Poste', RING_GROUP: 'Groupe d’appel', QUEUE: 'File d’attente', IVR: 'Standard vocal', EXTERNAL: 'Numéro externe' };
 
@@ -112,7 +114,8 @@
   function node(id) { for (var i = 0; i < state.graph.nodes.length; i++) if (state.graph.nodes[i].id === id) return state.graph.nodes[i]; return null; }
   function outputs(n) {
     switch (n.type) {
-      case 'start': case 'play': case 'set': case 'notify': case 'message': return ['next'];
+      case 'start': case 'set': case 'notify': case 'message': return ['next'];
+      case 'play': return n.data.source === 'url' ? ['next', 'error'] : ['next'];
       case 'menu': return (n.data.digits || []).concat(['invalid', 'noinput']);
       case 'collect': return ['next', 'invalid', 'noinput'];
       case 'http': return ['success', 'error'];
@@ -134,7 +137,8 @@
     var d = n.data || {};
     switch (n.type) {
       case 'start': return 'Point de départ de l’appel';
-      case 'play': return d.audioId ? '« ' + (audioName(d.audioId) || 'annonce') + ' »' : 'Annonce d’accueil par défaut';
+      case 'play': if (d.source === 'url') return 'Fichier : ' + String(d.audioUrl || '').slice(0, 50);
+        return d.audioId ? '« ' + (audioName(d.audioId) || 'annonce') + ' »' : 'Annonce d’accueil par défaut';
       case 'menu': return 'Touches ' + (d.digits || []).join(', ');
       case 'time': return (d.rules || []).map(function (r) { return r.days.map(function (x) { return DAYS[x - 1]; }).join('') + ' ' + r.from + '–' + r.to; }).join(' · ') || 'Aucune plage';
       case 'queue': return nameOf('QUEUE', d.queueId) || 'File à choisir';
@@ -143,6 +147,7 @@
       case 'message': return '« ' + String(d.text || '').slice(0, 60) + (String(d.text || '').length > 60 ? '…' : '') + ' »';
       case 'callback': return 'Rappel par ' + (d.targetType === 'extension' ? nameOf('EXTENSION', d.targetId) : nameOf('QUEUE', d.targetId)) || 'à choisir';
       case 'hangup': return 'L’appel se termine';
+      case 'http': return (d.method || 'GET') + ' ' + String(d.url || '').replace(/^https?:\/\//, '').slice(0, 40);
       default: return 'Bloc avancé : modifiable dans le panneau complet';
     }
   }
@@ -229,7 +234,18 @@
     switch (n.type) {
       case 'start': f += '<p class="mut small">Le scénario commence ici dès que l’appel arrive sur un numéro (ou le numéro interne) qui l’utilise.</p>'; break;
       case 'play':
-        f += '<label for="f-audio">Message diffusé</label><select id="f-audio" data-f="audioId">' + opts(state.catalog.audio, d.audioId, 'Annonce d’accueil par défaut') + '</select><p class="hint">Vos fichiers audio s’ajoutent dans le panneau complet (Annonces et musiques).</p>'; break;
+        f += '<label for="f-src">Source</label><select id="f-src" data-f="source"><option value="library"' + (d.source !== 'url' ? ' selected' : '') + '>Fichier de la bibliothèque</option><option value="url"' + (d.source === 'url' ? ' selected' : '') + '>Fichier personnalisé par adresse</option></select>';
+        if (d.source === 'url') {
+          f += '<label for="f-aurl">Adresse du fichier audio</label><input class="input" id="f-aurl" data-f="audioUrl" value="' + esc(d.audioUrl || '') + '" placeholder="{{var.audio_url}}"><p class="hint">https:// uniquement, ou une variable seule remplie par une « Requête HTTP » (ex. {{var.audio_url}}). WAV, MP3, OGG ou FLAC, 10 Mo et 10 min au plus. Fichier inaccessible : sortie « Erreur ».</p>';
+          f += '<label for="f-cache">Garder en cache</label><select id="f-cache" data-f="cacheMinutes" data-num>' + [['0', 'Non, télécharger à chaque appel'], ['5', '5 minutes'], ['60', '1 heure'], ['1440', '24 heures']].map(function (o) { return '<option value="' + o[0] + '"' + (String(d.cacheMinutes == null ? 60 : d.cacheMinutes) === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>';
+        } else f += '<label for="f-audio">Message diffusé</label><select id="f-audio" data-f="audioId">' + opts(state.catalog.audio, d.audioId, 'Annonce d’accueil par défaut') + '</select><p class="hint">Vos fichiers audio s’ajoutent dans le panneau complet (Annonces et musiques).</p>';
+        break;
+      case 'http':
+        f += '<label for="f-m">Méthode</label><select id="f-m" data-f="method">' + ['GET', 'POST'].map(function (m) { return '<option' + (d.method === m ? ' selected' : '') + '>' + m + '</option>'; }).join('') + '</select>';
+        f += '<label for="f-url">Adresse</label><input class="input" id="f-url" data-f="url" value="' + esc(d.url || '') + '" placeholder="https://crm.exemple.fr/client?tel={{caller}}">';
+        if (d.method === 'POST') f += '<label for="f-body">Corps (JSON)</label><textarea id="f-body" rows="3" data-f="body" placeholder=\'{"tel":"{{caller}}","code":"{{var.code}}"}\'>' + esc(d.body || '') + '</textarea>';
+        f += '<label for="f-map">Réponse → variables</label><textarea id="f-map" rows="3" data-maps placeholder="audio_url = data.audio&#10;crm_url = data.fiche">' + esc((d.mappings || []).map(function (m) { return m.variable + ' = ' + m.path; }).join('\n')) + '</textarea>';
+        f += '<p class="hint">Une ligne par variable : « nom = chemin dans la réponse JSON ». Utilisables ensuite : {{var.nom}}. Variables spéciales : <b>crm_url</b> (fiche ouverte chez l’agent qui décroche) et une adresse de son pour le bloc Annonce. Sorties : Succès / Erreur.</p>'; break;
       case 'menu':
         f += '<label for="f-audio">Message du menu</label><select id="f-audio" data-f="audioId">' + opts(state.catalog.audio, d.audioId, 'Message par défaut') + '</select>';
         f += '<label>Touches proposées</label><div class="checks">' + ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '*', '#'].map(function (k) { return '<label><input type="checkbox" data-digit="' + k + '"' + ((d.digits || []).indexOf(k) >= 0 ? ' checked' : '') + '> ' + k + '</label>'; }).join('') + '</div>';
@@ -273,9 +289,15 @@
         d[k] = el.hasAttribute('data-num') ? Number(v) : (v === '' && (k === 'audioId') ? null : v);
         if (k === 'destType') { if (v === 'EXTERNAL') { delete d.destId; d.destValue = ''; } else { delete d.destValue; d.destId = firstId(v); } }
         if (k === 'targetType') d.targetId = firstId(v === 'extension' ? 'EXTENSION' : 'QUEUE');
+        if (k === 'source') { if (v === 'url') { d.audioUrl = d.audioUrl || '{{var.audio_url}}'; d.cacheMinutes = d.cacheMinutes == null ? 60 : d.cacheMinutes; } else state.graph.edges = state.graph.edges.filter(function (e) { return e.source !== n.id || e.sourceHandle !== 'error'; }); }
         changed();
         if (el.tagName === 'SELECT') select(n.id);
       });
+    });
+    var maps = $('[data-maps]', p);
+    if (maps) maps.addEventListener('input', function () {
+      d.mappings = maps.value.split('\n').map(function (l) { var m = l.split('='); return { variable: String(m[0] || '').trim().replace(/[^\w]/g, '_'), path: m.slice(1).join('=').trim() }; }).filter(function (m) { return m.variable; }).slice(0, 20);
+      changed();
     });
     var vm = $('[data-vm]', p);
     if (vm) vm.addEventListener('change', function () { var v = vm.value; if (v.indexOf('s:') === 0) { d.sharedId = v.slice(2); delete d.extensionId; } else { d.extensionId = v.slice(2); delete d.sharedId; } changed(); });
