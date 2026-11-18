@@ -2,7 +2,7 @@
 
 Un espace client **clé en main**, à vos couleurs, que vous installez sur votre propre domaine (par exemple `espace.mon-operateur.fr`). Vos clients s’y connectent avec leurs identifiants habituels et gèrent leur téléphonie sans jamais voir la plateforme qui est derrière.
 
-Il se branche sur l’API de la plateforme avec **votre clé revendeur** : aucune base de données à installer, rien à synchroniser.
+Il se branche sur l’API de la plateforme par le **SDK officiel** [`@voxnova/sdk`](https://www.npmjs.com/package/@voxnova/sdk), avec **votre clé revendeur** : aucune base de données à installer, rien à synchroniser. Tout ce que l’API sait faire est disponible.
 
 > Une version PHP identique existe : [voxnova-espace-client-php](https://github.com/damidani/voxnova-espace-client-php).
 
@@ -14,6 +14,8 @@ Il se branche sur l’API de la plateforme avec **votre clé revendeur** : aucun
 | **Utilisateurs** | Liste (rôle, poste, état, dernière connexion), ajout avec invitation par e-mail, suppression |
 | **Numéros** | Où sonne chaque numéro (poste, groupe, file d’attente, standard vocal, horaires, messagerie…), achat d’un nouveau numéro par zone |
 | **Scénarios d’appel** | Éditeur visuel : horaires, menu à touches, annonce, file d’attente, transfert, messagerie, SMS à l’appelant, rappel ; modèles prêts à l’emploi, test par simulation (aucun appel passé), brouillon ou actif |
+| **Gestion** | Postes (paramètres SIP, état, nouveau mot de passe), groupes d’appel, standards vocaux, horaires, conférences, contacts (export CSV), appareils, demandes de rappel, webhooks (test, journal des envois), clés d’API, statistiques |
+| **Toutes les fonctions** | Chaque fonction de l’API (plus de 400), rangée par thème avec recherche : le formulaire est généré depuis la description de l’API, la réponse s’affiche en tableau. Téléchargements (CSV, PDF, audio) et envois de fichiers compris. Les administrateurs voient tout, les utilisateurs leurs propres fonctions. |
 | **Files d’attente** | Création, agents, répartition des appels, attente maximale, suppression |
 | **Appels** | Journal paginé, filtres entrants / sortants / manqués |
 | **Messagerie** | Messages vocaux de chaque poste, transcription, écoute, suppression |
@@ -85,7 +87,7 @@ Pour vous connecter comme un client fictif : sur la page de connexion, cliquez s
 
 - **Textes et pages** : `views/*.ejs` (gabarits EJS, en français).
 - **Apparence** : `public/style.css` (une seule feuille, mode sombre automatique, menu latéral repliable sur mobile). Interactions et éditeur de scénarios : `public/app.js`. La couleur de la marque vient de `BRAND_COLOR`.
-- **Nouvelles pages** : toute l’API est utilisable ; voir la [documentation revendeur](https://hcloud.fr/docs/revendeur) et la [documentation clients](https://hcloud.fr/docs/clients). Dans `src/server.js`, `api('GET', '/api/…', { as: as(req) })` appelle l’API au nom du client connecté.
+- **Nouvelles pages** : toute l’API est utilisable ; voir la [documentation revendeur](https://hcloud.fr/docs/revendeur) et la [documentation clients](https://hcloud.fr/docs/clients). Dans `src/server.js`, `vx(as(req)).api.org.users.list()` (SDK `@voxnova/sdk`) appelle n’importe quelle route de l’API au nom du client connecté, ou `vx(as(req)).call('org.users.get', { params: { id } })`. Pages de gestion : liste `RES` dans `public/console.js`.
 
 ## Comment ça marche
 

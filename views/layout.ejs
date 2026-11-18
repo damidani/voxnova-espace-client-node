@@ -24,10 +24,11 @@
     <nav class="nav" aria-label="Menu">
       <% const sections = me.role === 'ORG_ADMIN' ? [
         ['', [['/', 'Tableau de bord', 'home']]],
-        ['Téléphonie', [['/numeros', 'Numéros', 'phone'], ['/scenarios', 'Scénarios d’appel', 'flow'], ['/files', 'Files d’attente', 'queue'], ['/messagerie', 'Messagerie', 'voicemail']]],
-        ['Activité', [['/appels', 'Journal des appels', 'history'], ['/sms', 'SMS', 'message']]],
-        ['Entreprise', [['/utilisateurs', 'Utilisateurs', 'users'], ['/factures', 'Abonnement et factures', 'invoice']]],
-      ] : [['', [['/', 'Accueil', 'home']]]]; %>
+        ['Accueil des appels', [['/numeros', 'Numéros', 'phone'], ['/scenarios', 'Scénarios d’appel', 'flow'], ['/files', 'Files d’attente', 'queue'], ['/gerer/groupes', 'Groupes d’appel', 'users'], ['/gerer/standards', 'Standards vocaux', 'hash'], ['/gerer/horaires', 'Horaires', 'clock']]],
+        ['Postes et contacts', [['/utilisateurs', 'Utilisateurs', 'users'], ['/gerer/postes', 'Postes', 'phone'], ['/gerer/appareils', 'Appareils', 'grid'], ['/gerer/contacts', 'Contacts', 'users'], ['/gerer/conferences', 'Conférences', 'users']]],
+        ['Activité', [['/appels', 'Journal des appels', 'history'], ['/gerer/statistiques', 'Statistiques', 'chart'], ['/messagerie', 'Messagerie', 'voicemail'], ['/gerer/rappels', 'Rappels', 'callback'], ['/sms', 'SMS', 'message']]],
+        ['Entreprise', [['/factures', 'Abonnement et factures', 'invoice'], ['/gerer/webhooks', 'Webhooks', 'zap'], ['/gerer/cles', 'Clés d’API', 'shield'], ['/fonctions', 'Toutes les fonctions', 'sparkles']]],
+      ] : [['', [['/', 'Accueil', 'home'], ['/fonctions', 'Toutes les fonctions', 'sparkles']]]]; %>
       <% for (const [sec, items] of sections) { %>
         <% if (sec) { %><div class="nav-sec"><%= sec %></div><% } %>
         <% for (const [href, label, icon] of items) { %><a href="<%= href %>" class="<%= (href === '/' ? path === '/' : path.startsWith(href)) ? 'on' : '' %>"><%- ico(icon) %><%= label %></a><% } %>

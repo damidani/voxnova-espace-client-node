@@ -1,0 +1,16 @@
+<% const ico = (n) => `<svg class="ico" aria-hidden="true"><use href="#i-${n}"/></svg>`; %>
+<script src="/static/console.js" defer></script>
+<div class="page-head"><div><h1>Toutes les fonctions</h1><p class="mut">Tout ce que votre téléphonie sait faire, rangé par thème : choisissez une fonction, remplissez le formulaire, c’est appliqué tout de suite.</p></div></div>
+<div id="console" class="console">
+  <aside class="card ops">
+    <div class="ops-tools">
+      <input class="input" id="ops-q" type="search" placeholder="Rechercher : poste, renvoi, SMS, enregistrement…" aria-label="Rechercher une fonction">
+      <select id="ops-sec" aria-label="Rubrique"><option>Chargement…</option></select>
+      <p class="small mut" id="ops-count"></p>
+    </div>
+    <div id="ops-list" class="ops-list"><p class="mut small">Chargement…</p></div>
+  </aside>
+  <section id="op-detail" class="op-detail">
+    <div class="card empty-state"><%- ico('grid') %><h2>Choisissez une fonction</h2><p class="mut">Les fonctions marquées <span class="badge warn">Administrateur</span> sont réservées aux administrateurs de l’entreprise. Les suppressions demandent une confirmation.</p></div>
+  </section>
+</div>

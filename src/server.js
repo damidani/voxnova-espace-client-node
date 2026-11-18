@@ -4,7 +4,7 @@ import path from 'node:path';
 import express from 'express';
 import cookieSession from 'cookie-session';
 import ejs from 'ejs';
-import { api, ApiError } from './api.js';
+import { ApiError, clientOperations, download, upload, vx } from './api.js';
 import { checkConfig, config } from './config.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -52,7 +52,7 @@ const as = (req) => ({ org: req.session.user.orgId, user: req.session.user.id })
 // formulaires : jeton anti-falsification obligatoire
 app.use((req, res, next) => {
   if (req.method !== 'POST') return next();
-  const sent = Buffer.from(String(req.body?._csrf ?? req.get('x-csrf-token') ?? ''));
+  const sent = Buffer.from(String((Buffer.isBuffer(req.body) ? null : req.body?._csrf) ?? req.get('x-csrf-token') ?? ''));
   const expected = Buffer.from(String(req.session.csrf ?? ''));
   if (!expected.length || sent.length !== expected.length || !timingSafeEqual(sent, expected)) return res.status(403).send('Formulaire expiré : rechargez la page.');
   next();
@@ -88,7 +88,7 @@ app.post('/connexion', page(async (req, res) => {
   const code = String(req.body.code ?? '').replace(/\s/g, '');
   if (tooMany(req.ip)) return render(req, res, 'login', { title: 'Connexion', step: 'password', email, error: 'Trop de tentatives : réessayez dans une minute.' }, 429);
   try {
-    const r = await api('POST', '/api/reseller/portal/login', { body: { email, password, ...(code ? { code } : {}), clientIp: req.ip } });
+    const r = await vx().api.reseller.portal.login({ email, password, ...(code ? { code } : {}), clientIp: req.ip });
     if (r.mfaRequired) return render(req, res, 'login', { title: 'Connexion', step: 'code', email, password });
     req.session.user = { id: r.user.id, email: r.user.email, name: r.user.name, role: r.user.role, orgId: r.organization.id, orgName: r.organization.name };
     req.session.csrf = randomBytes(24).toString('hex');
@@ -103,7 +103,7 @@ app.post('/deconnexion', (req, res) => { req.session = null; res.redirect('/conn
 app.get('/mot-de-passe-oublie', (req, res) => render(req, res, 'forgot', { title: 'Mot de passe oublié' }));
 app.post('/mot-de-passe-oublie', page(async (req, res) => {
   if (tooMany(req.ip)) return render(req, res, 'forgot', { title: 'Mot de passe oublié', error: 'Trop de tentatives : réessayez dans une minute.' }, 429);
-  await api('POST', '/api/reseller/portal/forgot', { body: { email: String(req.body.email ?? '').trim(), resetUrl: `${config.publicUrl}/reinitialiser`, clientIp: req.ip } });
+  await vx().api.reseller.portal.forgot({ email: String(req.body.email ?? '').trim(), resetUrl: `${config.publicUrl}/reinitialiser`, clientIp: req.ip });
   render(req, res, 'forgot', { title: 'Mot de passe oublié', sent: true });
 }));
 app.get('/reinitialiser', (req, res) => render(req, res, 'reset', { title: 'Nouveau mot de passe', token: String(req.query.token ?? '') }));
@@ -111,7 +111,7 @@ app.post('/reinitialiser', page(async (req, res) => {
   const token = String(req.body.token ?? '');
   if (req.body.password !== req.body.confirm) return render(req, res, 'reset', { title: 'Nouveau mot de passe', token, error: 'Les deux mots de passe ne correspondent pas.' }, 400);
   try {
-    await api('POST', '/api/auth/reset', { body: { token, password: String(req.body.password ?? '') } });
+    await vx().api.auth.reset({ token, password: String(req.body.password ?? '') });
   } catch (e) { if (e instanceof ApiError && e.status < 500) return render(req, res, 'reset', { title: 'Nouveau mot de passe', token, error: e.message }, 400); throw e; }
   flash(req, 'success', 'Mot de passe enregistré : vous pouvez vous connecter.');
   res.redirect('/connexion');
@@ -124,8 +124,8 @@ app.post('/inscription', page(async (req, res) => {
   if (tooMany(req.ip)) return render(req, res, 'signup', { title: 'Créer mon compte', v: req.body, error: 'Trop de tentatives : réessayez dans une minute.' }, 429);
   const v = { company: String(req.body.company ?? '').trim(), name: String(req.body.name ?? '').trim(), email: String(req.body.email ?? '').trim() };
   try {
-    await api('POST', '/api/reseller/clients', { body: { ...v, password: String(req.body.password ?? ''), product: 'CENTREX_HOSTED', trialDays: config.trialDays } });
-    const r = await api('POST', '/api/reseller/portal/login', { body: { email: v.email, password: String(req.body.password ?? ''), clientIp: req.ip } });
+    await vx().api.reseller.clients.create({ ...v, password: String(req.body.password ?? ''), product: 'CENTREX_HOSTED', trialDays: config.trialDays });
+    const r = await vx().api.reseller.portal.login({ email: v.email, password: String(req.body.password ?? ''), clientIp: req.ip });
     req.session.user = { id: r.user.id, email: r.user.email, name: r.user.name, role: r.user.role, orgId: r.organization.id, orgName: r.organization.name };
     flash(req, 'success', 'Bienvenue ! Votre compte est prêt.');
     res.redirect('/');
@@ -135,40 +135,40 @@ app.post('/inscription', page(async (req, res) => {
 // ------------------------------------------------------------------ espace client
 app.get('/', signedIn, page(async (req, res) => {
   if (req.session.user.role !== 'ORG_ADMIN') return render(req, res, 'home-user', { title: 'Accueil' });
-  const [o, numbers, cdr, flows] = await Promise.all([api('GET', '/api/org/overview', { as: as(req) }), api('GET', '/api/centrex/numbers', { as: as(req) }), api('GET', '/api/centrex/cdr', { as: as(req), query: { page: 1, pageSize: 6 } }).catch(() => null), api('GET', '/api/centrex/flows', { as: as(req) }).catch(() => [])]);
+  const [o, numbers, cdr, flows] = await Promise.all([vx(as(req)).api.org.overview.get(), vx(as(req)).api.centrex.numbers.list(), vx(as(req)).api.centrex.cdr.list({ page: 1, pageSize: 6 }).catch(() => null), vx(as(req)).api.centrex.flows.list().catch(() => [])]);
   render(req, res, 'dashboard', { title: 'Tableau de bord', o, numbers, recent: (cdr?.items ?? []).slice(0, 6), flows });
 }));
 
 app.get('/utilisateurs', signedIn, adminOnly, page(async (req, res) => {
-  const [users, extensions] = await Promise.all([api('GET', '/api/org/users', { as: as(req) }), api('GET', '/api/org/extensions', { as: as(req) })]);
+  const [users, extensions] = await Promise.all([vx(as(req)).api.org.users.list(), vx(as(req)).api.org.extensions.list()]);
   render(req, res, 'users', { title: 'Utilisateurs', users, extensions });
 }));
 app.post('/utilisateurs', signedIn, adminOnly, page(async (req, res) => {
-  await api('POST', '/api/org/users', { as: as(req), body: { email: String(req.body.email ?? '').trim(), name: String(req.body.name ?? '').trim(), role: req.body.role === 'ORG_ADMIN' ? 'ORG_ADMIN' : 'USER', sendInvite: true } });
+  await vx(as(req)).api.org.users.create({ email: String(req.body.email ?? '').trim(), name: String(req.body.name ?? '').trim(), role: req.body.role === 'ORG_ADMIN' ? 'ORG_ADMIN' : 'USER', sendInvite: true });
   flash(req, 'success', 'Utilisateur ajouté : il reçoit une invitation par e-mail.');
   res.redirect('/utilisateurs');
 }));
 app.post('/utilisateurs/:id/supprimer', signedIn, adminOnly, page(async (req, res) => {
-  await api('DELETE', `/api/org/users/${encodeURIComponent(req.params.id)}`, { as: as(req) });
+  await vx(as(req)).api.org.users.delete(req.params.id);
   flash(req, 'success', 'Utilisateur supprimé.');
   res.redirect('/utilisateurs');
 }));
 
 const DEST_LABELS = { EXTENSION: 'Poste', RING_GROUP: 'Groupe d’appel', IVR: 'Standard vocal', QUEUE: 'File d’attente', VOICEMAIL: 'Messagerie vocale', CONFERENCE: 'Conférence', TIME_CONDITION: 'Horaires', FLOW: 'Scénario', SHARED_VOICEMAIL: 'Messagerie partagée', AI_AGENT: 'Standardiste IA', APPLICATION: 'Application' };
 app.get('/numeros', signedIn, adminOnly, page(async (req, res) => {
-  const [numbers, destinations] = await Promise.all([api('GET', '/api/centrex/numbers', { as: as(req) }), api('GET', '/api/centrex/destinations', { as: as(req) })]);
+  const [numbers, destinations] = await Promise.all([vx(as(req)).api.centrex.numbers.list(), vx(as(req)).api.centrex.destinations.get()]);
   const area = /^0[1-59]$/.test(String(req.query.zone ?? '')) ? String(req.query.zone) : '';
-  const shop = area ? await api('GET', '/api/billing/numbers', { as: as(req), query: { area } }) : null;
+  const shop = area ? await vx(as(req)).api.billing.numbers.get({ area }) : null;
   render(req, res, 'numbers', { title: 'Numéros', numbers, destinations, labels: DEST_LABELS, area, shop });
 }));
 app.post('/numeros/acheter', signedIn, adminOnly, page(async (req, res) => {
-  const r = await api('POST', '/api/billing/numbers', { as: as(req), body: { number: String(req.body.number ?? '') } });
+  const r = await vx(as(req)).api.billing.numbers.create({ number: String(req.body.number ?? '') });
   flash(req, 'success', `Numéro ${phone(r.number)} ajouté${r.chargedCents ? ` (${money(r.chargedCents)} TTC facturés au prorata)` : ''}. Choisissez maintenant où il sonne.`);
   res.redirect('/numeros');
 }));
 app.post('/numeros/:id', signedIn, adminOnly, page(async (req, res) => {
   const [destType, destId] = String(req.body.dest ?? '').split(':');
-  await api('PUT', `/api/centrex/numbers/${encodeURIComponent(req.params.id)}`, { as: as(req), body: destType ? { destType, destId: destId || null, destValue: null } : { destType: null, destId: null, destValue: null } });
+  await vx(as(req)).api.centrex.numbers.update(req.params.id, destType ? { destType, destId: destId || null, destValue: null } : { destType: null, destId: null, destValue: null });
   flash(req, 'success', 'Destination du numéro enregistrée.');
   res.redirect('/numeros');
 }));
@@ -176,21 +176,21 @@ app.post('/numeros/:id', signedIn, adminOnly, page(async (req, res) => {
 const STRATEGIES = { 'longest-idle-agent': 'L’agent libre depuis le plus longtemps', 'ring-all': 'Tous les agents en même temps', 'round-robin': 'Chacun son tour', 'top-down': 'Dans l’ordre de la liste', 'agent-with-least-talk-time': 'L’agent qui a le moins parlé', random: 'Au hasard' };
 const members = (body) => [].concat(body.members ?? []).map(String).filter(Boolean);
 app.get('/files', signedIn, adminOnly, page(async (req, res) => {
-  const [queues, extensions] = await Promise.all([api('GET', '/api/centrex/queues', { as: as(req) }), api('GET', '/api/org/extensions', { as: as(req) })]);
+  const [queues, extensions] = await Promise.all([vx(as(req)).api.centrex.queues.list(), vx(as(req)).api.org.extensions.list()]);
   render(req, res, 'queues', { title: 'Files d’attente', queues, extensions, strategies: STRATEGIES });
 }));
 app.post('/files', signedIn, adminOnly, page(async (req, res) => {
-  await api('POST', '/api/centrex/queues', { as: as(req), body: { number: String(req.body.number ?? '').trim(), name: String(req.body.name ?? '').trim(), strategy: STRATEGIES[req.body.strategy] ? req.body.strategy : 'longest-idle-agent', members: members(req.body), maxWaitSeconds: Number(req.body.maxWaitSeconds) || 300 } });
+  await vx(as(req)).api.centrex.queues.create({ number: String(req.body.number ?? '').trim(), name: String(req.body.name ?? '').trim(), strategy: STRATEGIES[req.body.strategy] ? req.body.strategy : 'longest-idle-agent', members: members(req.body), maxWaitSeconds: Number(req.body.maxWaitSeconds) || 300 });
   flash(req, 'success', 'File d’attente créée.');
   res.redirect('/files');
 }));
 app.post('/files/:id', signedIn, adminOnly, page(async (req, res) => {
-  await api('PUT', `/api/centrex/queues/${encodeURIComponent(req.params.id)}`, { as: as(req), body: { name: String(req.body.name ?? '').trim(), strategy: STRATEGIES[req.body.strategy] ? req.body.strategy : undefined, members: members(req.body), maxWaitSeconds: Number(req.body.maxWaitSeconds) || undefined } });
+  await vx(as(req)).api.centrex.queues.update(req.params.id, { name: String(req.body.name ?? '').trim(), strategy: STRATEGIES[req.body.strategy] ? req.body.strategy : undefined, members: members(req.body), maxWaitSeconds: Number(req.body.maxWaitSeconds) || undefined });
   flash(req, 'success', 'File d’attente enregistrée.');
   res.redirect('/files');
 }));
 app.post('/files/:id/supprimer', signedIn, adminOnly, page(async (req, res) => {
-  await api('DELETE', `/api/centrex/queues/${encodeURIComponent(req.params.id)}`, { as: as(req) });
+  await vx(as(req)).api.centrex.queues.delete(req.params.id);
   flash(req, 'success', 'File d’attente supprimée.');
   res.redirect('/files');
 }));
@@ -199,20 +199,20 @@ app.get('/appels', signedIn, adminOnly, page(async (req, res) => {
   const pageNo = Math.max(1, Number(req.query.page) || 1);
   const direction = ['INBOUND', 'OUTBOUND', 'INTERNAL'].includes(req.query.sens) ? req.query.sens : '';
   const answered = ['yes', 'no'].includes(req.query.repondu) ? req.query.repondu : '';
-  const cdr = await api('GET', '/api/centrex/cdr', { as: as(req), query: { page: pageNo, pageSize: 50, direction, answered } });
+  const cdr = await vx(as(req)).api.centrex.cdr.list({ page: pageNo, pageSize: 50, direction: direction || undefined, answered: answered || undefined });
   render(req, res, 'calls', { title: 'Journal des appels', cdr, pageNo, direction, answered });
 }));
 
 app.get('/messagerie', signedIn, adminOnly, page(async (req, res) => {
-  const vm = await api('GET', '/api/v1/voicemail', { as: as(req) });
+  const vm = await vx(as(req)).api.v1.voicemail.list();
   render(req, res, 'voicemail', { title: 'Messagerie vocale', vm });
 }));
 app.post('/messagerie/:ext/:uuid/ecouter', signedIn, adminOnly, page(async (req, res) => {
-  const r = await api('POST', `/api/v1/voicemail/${encodeURIComponent(req.params.ext)}/${encodeURIComponent(req.params.uuid)}/url`, { as: as(req) });
+  const r = await vx(as(req)).api.v1.voicemail.url(req.params.ext, req.params.uuid);
   res.redirect(r.url);
 }));
 app.post('/messagerie/:ext/:uuid/supprimer', signedIn, adminOnly, page(async (req, res) => {
-  await api('DELETE', `/api/v1/voicemail/${encodeURIComponent(req.params.ext)}/${encodeURIComponent(req.params.uuid)}`, { as: as(req) });
+  await vx(as(req)).api.v1.voicemail.delete(req.params.ext, req.params.uuid);
   flash(req, 'success', 'Message supprimé.');
   res.redirect('/messagerie');
 }));
@@ -221,23 +221,23 @@ app.get('/sms', signedIn, adminOnly, page(async (req, res) => {
   const month = /^\d{4}-\d{2}$/.test(String(req.query.mois ?? '')) ? String(req.query.mois) : new Date().toISOString().slice(0, 7);
   const pageNo = Math.max(1, Number(req.query.page) || 1);
   const [balance, history] = await Promise.all([
-    api('GET', '/api/v1/sms/balance', { as: as(req) }).catch((e) => ({ error: e.message })),
-    api('GET', '/api/org/messaging/history', { as: as(req), query: { month, page: pageNo, pageSize: 50 } }).catch(() => null),
+    vx(as(req)).api.v1.sms.balance.get().catch((e) => ({ error: e.message })),
+    vx(as(req)).api.org.messaging.history.get({ month, page: pageNo, pageSize: 50 }).catch(() => null),
   ]);
   render(req, res, 'sms', { title: 'SMS', balance, history, month, pageNo });
 }));
 app.post('/sms', signedIn, adminOnly, page(async (req, res) => {
-  const r = await api('POST', '/api/v1/sms', { as: as(req), body: { to: String(req.body.to ?? '').trim(), text: String(req.body.text ?? '').trim() } });
+  const r = await vx(as(req)).api.v1.sms.create({ to: String(req.body.to ?? '').trim(), text: String(req.body.text ?? '').trim() });
   flash(req, 'success', `SMS envoyé à ${phone(r.to)} (${r.segments} SMS compté${r.segments > 1 ? 's' : ''}). Il part dans quelques secondes.`);
   res.redirect('/sms');
 }));
 
 app.get('/factures', signedIn, adminOnly, page(async (req, res) => {
-  const b = await api('GET', '/api/billing', { as: as(req) });
+  const b = await vx(as(req)).api.billing.get();
   render(req, res, 'invoices', { title: 'Abonnement et factures', b });
 }));
 app.get('/factures/:id.pdf', signedIn, adminOnly, page(async (req, res) => {
-  const r = await api('GET', `/api/billing/invoices/${encodeURIComponent(req.params.id)}`, { as: as(req), raw: true });
+  const r = await download(`/api/billing/invoices/${encodeURIComponent(req.params.id)}`, { as: as(req) });
   res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': r.headers.get('content-disposition') ?? 'inline', 'Cache-Control': 'private, no-store' });
   res.send(Buffer.from(await r.arrayBuffer()));
 }));
@@ -249,12 +249,12 @@ const TEMPLATES = { horaires: 'Accueil avec horaires', menu: 'Menu à touches', 
 const json = (fn) => async (req, res) => {
   try { res.json(await fn(req, res)); } catch (e) {
     if (!(e instanceof ApiError)) { console.error(e); return res.status(500).json({ error: 'Une erreur est survenue.' }); }
-    res.status(e.status).json({ error: e.message, errors: e.details ?? [] });
+    res.status(e.status).json({ error: e.message, errors: Array.isArray(e.body?.details) ? e.body.details : [] });
   }
 };
 const flowBody = (b) => ({ name: String(b.name ?? '').trim().slice(0, 100) || 'Scénario', description: String(b.description ?? '').slice(0, 500), number: /^\d{2,6}$/.test(String(b.number ?? '')) ? String(b.number) : null, enabled: b.enabled !== false, graph: b.graph && typeof b.graph === 'object' ? b.graph : { nodes: [], edges: [] } });
 app.get('/scenarios', signedIn, adminOnly, page(async (req, res) => {
-  const [flows, numbers] = await Promise.all([api('GET', '/api/centrex/flows', { as: as(req) }), api('GET', '/api/centrex/numbers', { as: as(req) })]);
+  const [flows, numbers] = await Promise.all([vx(as(req)).api.centrex.flows.list(), vx(as(req)).api.centrex.numbers.list()]);
   const used = {};
   for (const n of numbers) if (n.destType === 'FLOW' && n.destId) (used[n.destId] ??= []).push(n.number);
   render(req, res, 'flows', { title: 'Scénarios d’appel', flows, used, templates: TEMPLATES });
@@ -266,40 +266,72 @@ app.get('/scenarios/nouveau', signedIn, adminOnly, (req, res) => {
 app.get('/scenarios/:id', signedIn, adminOnly, (req, res) => render(req, res, 'flow-editor', { title: 'Scénario d’appel', flowId: req.params.id, template: '', name: '' }));
 app.get('/scenarios/:id/donnees', signedIn, adminOnly, json(async (req) => {
   const [flow, destinations, audio] = await Promise.all([
-    req.params.id === 'nouveau' ? null : api('GET', `/api/centrex/flows/${encodeURIComponent(req.params.id)}`, { as: as(req) }),
-    api('GET', '/api/centrex/destinations', { as: as(req) }),
-    api('GET', '/api/centrex/audio', { as: as(req) }).catch(() => []),
+    req.params.id === 'nouveau' ? null : vx(as(req)).api.centrex.flows.get(req.params.id),
+    vx(as(req)).api.centrex.destinations.get(),
+    vx(as(req)).api.centrex.audio.list().catch(() => []),
   ]);
   return { flow, catalog: { ...destinations, audio: audio.map((a) => ({ id: a.id, name: a.name })) } };
 }));
 app.post('/scenarios/:id/donnees', signedIn, adminOnly, json(async (req) => {
   const body = flowBody(req.body);
   if (req.params.id === 'nouveau') {
-    const f = await api('POST', '/api/centrex/flows', { as: as(req), body });
+    const f = await vx(as(req)).api.centrex.flows.create(body);
     flash(req, 'success', `Scénario « ${f.name} » créé. Choisissez-le comme destination d’un numéro pour qu’il serve.`);
     return f;
   }
-  return api('PUT', `/api/centrex/flows/${encodeURIComponent(req.params.id)}`, { as: as(req), body });
+  return vx(as(req)).api.centrex.flows.update(req.params.id, body);
 }));
 app.post('/scenarios/:id/simuler', signedIn, adminOnly, json(async (req) => {
   const b = req.body ?? {};
-  return api('POST', '/api/centrex/flows/simulate', { as: as(req), body: { graph: b.graph, caller: String(b.caller ?? '0612345678').slice(0, 30), digits: [].concat(b.digits ?? []).map(String).slice(0, 30), ...(b.at ? { at: String(b.at) } : {}) } });
+  return vx(as(req)).api.centrex.flows.simulate({ graph: b.graph, caller: String(b.caller ?? '0612345678').slice(0, 30), digits: [].concat(b.digits ?? []).map(String).slice(0, 30), ...(b.at ? { at: String(b.at) } : {}) });
 }));
 app.post('/scenarios/:id/activer', signedIn, adminOnly, page(async (req, res) => {
-  const f = await api('GET', `/api/centrex/flows/${encodeURIComponent(req.params.id)}`, { as: as(req) });
-  await api('PUT', `/api/centrex/flows/${encodeURIComponent(f.id)}`, { as: as(req), body: flowBody({ ...f, enabled: !f.enabled }) });
+  const f = await vx(as(req)).api.centrex.flows.get(req.params.id);
+  await vx(as(req)).api.centrex.flows.update(f.id, flowBody({ ...f, enabled: !f.enabled }));
   flash(req, 'success', f.enabled ? `« ${f.name} » désactivé.` : `« ${f.name} » activé.`);
   res.redirect('/scenarios');
 }));
 app.post('/scenarios/:id/supprimer', signedIn, adminOnly, page(async (req, res) => {
-  await api('DELETE', `/api/centrex/flows/${encodeURIComponent(req.params.id)}`, { as: as(req) });
+  await vx(as(req)).api.centrex.flows.delete(req.params.id);
   flash(req, 'success', 'Scénario supprimé.');
   res.redirect('/scenarios');
 }));
-app.get('/appels-en-cours', signedIn, adminOnly, json(async (req) => api('GET', '/api/centrex/live', { as: as(req) })));
+app.get('/appels-en-cours', signedIn, adminOnly, json(async (req) => vx(as(req)).api.centrex.live.list()));
+
+// ------------------------------------------------------------------ toutes les fonctions de l'API (par le SDK)
+const RESOURCES = { postes: 'Postes', groupes: 'Groupes d’appel', standards: 'Standards vocaux', horaires: 'Horaires', conferences: 'Conférences', contacts: 'Contacts', appareils: 'Appareils', rappels: 'Demandes de rappel', webhooks: 'Webhooks', cles: 'Clés d’API', statistiques: 'Statistiques' };
+const opsFor = (user) => clientOperations.filter((o) => user.role === 'ORG_ADMIN' || o.access === 'user');
+const opById = (req, id) => opsFor(req.session.user).find((o) => o.id === id);
+const parseJson = (v) => { try { const x = JSON.parse(String(v ?? '{}')); return x && typeof x === 'object' && !Array.isArray(x) ? x : {}; } catch { return {}; } };
+const strings = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, String(v)]));
+const pathOf = (op, params) => op.path.replace(/:(\w+)/g, (_, p) => { const v = String(params[p] ?? ''); if (!v) throw new ApiError(`Paramètre manquant : ${p}`, 400, null); return encodeURIComponent(v); });
+
+app.get('/fonctions', signedIn, (req, res) => render(req, res, 'console', { title: 'Toutes les fonctions' }));
+app.get('/fonctions/operations', signedIn, (req, res) => res.set('Cache-Control', 'private, max-age=300').json(opsFor(req.session.user)));
+app.post('/fonctions/appel', signedIn, json(async (req) => {
+  const op = opById(req, String(req.body?.id ?? ''));
+  if (!op) throw new ApiError('Fonction indisponible', 404, null);
+  const params = strings(parseJson(JSON.stringify(req.body.params ?? {})));
+  pathOf(op, params); // paramètres du chemin présents (sinon erreur 400 lisible)
+  const result = await vx(as(req)).call(op.id, { params, body: op.method === 'GET' ? undefined : (req.body.body ?? {}), query: parseJson(JSON.stringify(req.body.query ?? {})) });
+  return { result: result ?? { ok: true } };
+}));
+app.get('/fonctions/fichier', signedIn, page(async (req, res) => {
+  const op = opById(req, String(req.query.op ?? ''));
+  if (!op || op.method !== 'GET') throw new ApiError('Fonction indisponible', 404, null);
+  const r = await download(pathOf(op, parseJson(req.query.params)), { as: as(req), query: parseJson(req.query.query) });
+  res.set({ 'Content-Type': r.headers.get('content-type') ?? 'application/octet-stream', 'Content-Disposition': r.headers.get('content-disposition') ?? 'inline', 'Cache-Control': 'private, no-store' });
+  res.send(Buffer.from(await r.arrayBuffer()));
+}));
+app.post('/fonctions/envoi', signedIn, express.raw({ type: 'multipart/form-data', limit: '25mb' }), json(async (req) => {
+  const op = opById(req, String(req.query.op ?? ''));
+  if (!op || !op.multipart) throw new ApiError('Fonction indisponible', 404, null);
+  return { result: await upload(pathOf(op, parseJson(req.query.params)), { as: as(req), body: req.body, contentType: req.get('content-type') }) };
+}));
+app.get('/gerer/:page', signedIn, adminOnly, (req, res) => (Object.hasOwn(RESOURCES, req.params.page) ? render(req, res, 'resource', { title: RESOURCES[req.params.page], resource: req.params.page }) : render(req, res, 'error', { title: 'Page introuvable', message: 'Cette page n’existe pas.' }, 404)));
 
 app.post('/panneau', signedIn, page(async (req, res) => {
-  const r = await api('POST', `/api/reseller/clients/${encodeURIComponent(req.session.user.orgId)}/login-link`, { body: { user: req.session.user.id, ttlSeconds: 60 } });
+  const r = await vx().api.reseller.clients.loginLink(req.session.user.orgId, { user: req.session.user.id, ttlSeconds: 60 });
   // page intermédiaire : un formulaire ne peut pas rediriger vers un autre domaine (politique de sécurité)
   res.set('Cache-Control', 'no-store');
   render(req, res, 'open-panel', { title: 'Ouverture du panneau', url: r.url });

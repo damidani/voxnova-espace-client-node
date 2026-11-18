@@ -78,6 +78,18 @@ test('connexion, tableau de bord, envoi de SMS au nom du client, formulaires pro
   assert.deepEqual((await refused.json()).errors, ['Il faut un bloc Début']);
   const sim = await (await js('/scenarios/f1/simuler', { graph, caller: '0611', digits: ['1'] }, token)).json();
   assert.equal(sim.end.kind, 'hangup');
+
+  // toutes les fonctions : catalogue du SDK, appel par identifiant, jamais l'espace revendeur
+  const ops = await (await fetch(base + '/fonctions/operations', { headers: { cookie } })).json();
+  assert.ok(ops.length > 300 && ops.every((o) => !o.path.startsWith('/api/reseller') && !o.path.startsWith('/api/auth')));
+  const listed = await (await js('/fonctions/appel', { id: 'centrex.flows.list' }, token)).json();
+  assert.equal(listed.result[0].id, 'f1');
+  assert.equal(calls.at(-1).url, '/api/centrex/flows');
+  assert.equal(calls.at(-1).org, 'o1');
+  assert.equal((await js('/fonctions/appel', { id: 'reseller.clients.list' }, token)).status, 404, 'espace revendeur refusé');
+  assert.equal((await js('/fonctions/appel', { id: 'centrex.flows.get', params: {} }, token)).status, 400, 'paramètre manquant');
+  page = await get('/gerer/postes');
+  assert.match(page.text, /data-resource="postes"/);
 });
 
 test('double authentification : le code est demandé avant d’ouvrir la session', async () => {
